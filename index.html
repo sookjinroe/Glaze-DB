@@ -153,7 +153,12 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
   <div class="ctrl">
     <select class="chip" id="glazeSel"></select>
     <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
-    <button class="chip" id="starBtn" aria-pressed="false">★ 즐겨찾기</button>
+    <select class="chip" id="starSel">
+      <option value="0">별점 전체</option>
+      <option value="1">★ 이상</option>
+      <option value="2">★★ 이상</option>
+      <option value="3">★★★만</option>
+    </select>
     <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
     <select class="chip" id="sortSel">
       <option value="hue">색 그룹순</option>
@@ -240,7 +245,7 @@ async function pullStore(){
 if(getToken())pullStore();
 
 /* ---------- filter state ---------- */
-const F={grps:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
+const F={grps:new Set(),glaze:'',make:false,star:0,tag:'',sort:'hue'};
 let curTab='spec', glazeDetail=null;
 
 /* ---------- group chips ---------- */
@@ -257,7 +262,7 @@ GRPS.forEach((g,gi)=>{
 $('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('');
 $('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
 $('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
-$('#starBtn').onclick=()=>{F.star=!F.star;$('#starBtn').setAttribute('aria-pressed',F.star);render()};
+$('#starSel').onchange=e=>{F.star=+e.target.value;render()};
 $('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
 $('#sortSel').onchange=e=>{F.sort=e.target.value;render()};
 function refreshTagSel(){
@@ -272,7 +277,7 @@ function filtered(){
   if(F.grps.size)xs=xs.filter(s=>F.grps.has(s.grp));
   if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
   if(F.make)xs=xs.filter(makeable);
-  if(F.star)xs=xs.filter(s=>store.stars[s.code]);
+  if(F.star)xs=xs.filter(s=>(store.stars[s.code]||0)>=F.star);
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
   const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
     code:(a,b)=>a.u-b.u||a.o-b.o};
