@@ -50,6 +50,9 @@ select.chip{appearance:none;padding-right:26px;background-image:url("data:image/
 
 /* ---------- grid ---------- */
 main{max-width:1080px;margin:0 auto;padding:4px 16px 80px}
+.ghead{margin:18px 2px 8px;font-size:13px;font-weight:700;color:var(--sub);display:flex;align-items:center;gap:8px}
+.ghead .gdot{width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,.12)}
+.ghead b{color:var(--ink)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
 @media(min-width:720px){.grid{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:14px}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center;padding-bottom:8px;position:relative;transition:transform .12s}
@@ -147,7 +150,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
     <button class="chip" id="starBtn" aria-pressed="false">★ 즐겨찾기</button>
     <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
     <select class="chip" id="sortSel">
-      <option value="hue">색상환순</option>
+      <option value="hue">색 그룹순</option>
       <option value="light">밝은순</option>
       <option value="dark">어두운순</option>
       <option value="code">코드순</option>
@@ -157,7 +160,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
 </div>
 
 <main>
-  <section id="specView"><div class="grid" id="grid"></div><div class="empty" id="emptyMsg" hidden></div></section>
+  <section id="specView"><div id="grid"></div><div class="empty" id="emptyMsg" hidden></div></section>
   <section id="glazeView" hidden></section>
   <section id="setView" class="settings" hidden></section>
 </main>
@@ -165,7 +168,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
 
-<script src="data.js?v=4"></script>
+<script src="data.js?v=5"></script>
 <script>
 try{
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -182,19 +185,16 @@ const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
 const makeable=s=>ownedBrush(s.u)&&ownedBrush(s.o);
 
 /* ---------- filter state ---------- */
-const F={fams:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
+const F={grps:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
 let curTab='spec', glazeDetail=null;
 
-/* ---------- family chips ---------- */
-function famAvg(f){const xs=SP.filter(s=>s.fam===f); if(!xs.length)return '#CCC';
- const m=c=>Math.round(xs.reduce((a,s)=>a+parseInt(s.hex.substr(c,2),16),0)/xs.length);
- return '#'+[m(1),m(3),m(5)].map(v=>v.toString(16).padStart(2,'0')).join('');}
-FAMS.forEach(f=>{
-  const n=SP.filter(s=>s.fam===f).length; if(!n)return;
+/* ---------- group chips ---------- */
+const GRPS=(window.DATA&&window.DATA.groups)||[];
+GRPS.forEach((g,gi)=>{
   const b=document.createElement('button'); b.className='fam'; b.setAttribute('aria-pressed','false');
-  b.innerHTML=`<span class="dot" style="background:${famAvg(f)}"></span><span>${f}</span>`;
-  b.onclick=()=>{F.fams.has(f)?F.fams.delete(f):F.fams.add(f);
-    b.setAttribute('aria-pressed',F.fams.has(f)); render();};
+  b.innerHTML=`<span class="dot" style="background:${g.hex}"></span><span>${g.name}</span>`;
+  b.onclick=()=>{F.grps.has(gi)?F.grps.delete(gi):F.grps.add(gi);
+    b.setAttribute('aria-pressed',F.grps.has(gi)); render();};
   $('#famRow').appendChild(b);
 });
 
@@ -214,13 +214,12 @@ function refreshTagSel(){
 /* ---------- filtering ---------- */
 function filtered(){
   let xs=SP;
-  if(F.fams.size)xs=xs.filter(s=>F.fams.has(s.fam));
+  if(F.grps.size)xs=xs.filter(s=>F.grps.has(s.grp));
   if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
   if(F.make)xs=xs.filter(makeable);
   if(F.star)xs=xs.filter(s=>store.stars[s.code]);
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
-  const FI=Object.fromEntries(FAMS.map((f,i)=>[f,i]));
-  const by={hue:(a,b)=>(FI[a.fam]-FI[b.fam])||a.hue-b.hue||a.l-b.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
+  const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
     code:(a,b)=>a.u-b.u||a.o-b.o};
   return [...xs].sort(by[F.sort]);
 }
@@ -237,7 +236,18 @@ function render(){
   refreshTagSel();
   if(curTab!=='spec')return renderTab();
   const xs=filtered();
-  $('#grid').innerHTML=xs.map(cardHTML).join('');
+  if(F.sort==='hue'&&GRPS.length){
+    let html='';
+    GRPS.forEach((g,gi)=>{
+      const ys=xs.filter(s=>s.grp===gi);
+      if(!ys.length)return;
+      html+=`<div class="ghead"><span class="gdot" style="background:${g.hex}"></span>${g.name} <b>${ys.length}</b></div>`
+           +`<div class="grid">${ys.map(cardHTML).join('')}</div>`;
+    });
+    $('#grid').innerHTML=html;
+  }else{
+    $('#grid').innerHTML=`<div class="grid">${xs.map(cardHTML).join('')}</div>`;
+  }
   $('#emptyMsg').hidden=xs.length>0;
   $('#emptyMsg').innerHTML='조건에 맞는 시편이 없어요.<br>필터를 하나 풀어보세요.';
   $('#resultLine').innerHTML=`<b>${xs.length}</b> / ${SP.length}개`;
@@ -259,7 +269,7 @@ function openSheet(code){
   const mk=makeable(s), st=store.stars[code]||0;
   const tagNames=Object.keys(store.tags).sort();
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode">${s.code}</span><span class="dfam">${s.fam} · ${s.hex}</span></div>
+    <div class="dhead"><span class="dcode">${s.code}</span><span class="dfam">${(GRPS[s.grp]||{}).name||s.fam} · ${s.hex}</span></div>
     <img class="dimg" src="crops/${s.file}" alt="시편 ${s.code}">
     <div class="stars" role="group" aria-label="별점">
       ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
@@ -316,8 +326,7 @@ function renderGlazeList(){
 function renderGlazeDetail(no){
   glazeDetail=no; const g=GMAP[no];
   const under=SP.filter(s=>s.u===no), over=SP.filter(s=>s.o===no);
-  const FI2=Object.fromEntries(FAMS.map((f,i)=>[f,i]));
-  const grid=xs=>'<div class="grid">'+[...xs].sort((a,b)=>(FI2[a.fam]-FI2[b.fam])||a.hue-b.hue||a.l-b.l).map(cardHTML).join('')+'</div>';
+  const grid=xs=>'<div class="grid">'+[...xs].sort((a,b)=>a.grp-b.grp||b.l-a.l).map(cardHTML).join('')+'</div>';
   $('#glazeView').innerHTML=`
     <div class="backbar"><button id="gBack">← 유약 전체</button>
       <span class="nm" style="font-weight:800">${g.no} ${g.name}</span>
