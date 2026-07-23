@@ -143,11 +143,6 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
   <div class="famrow" id="famRow"></div>
   <div class="ctrl">
     <select class="chip" id="glazeSel"></select>
-    <select class="chip" id="posSel">
-      <option value="any">위치 무관</option>
-      <option value="u">밑유약으로</option>
-      <option value="o">윗유약으로</option>
-    </select>
     <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
     <button class="chip" id="starBtn" aria-pressed="false">★ 즐겨찾기</button>
     <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
@@ -170,12 +165,13 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
 
-<script src="data.js"></script>
+<script src="data.js?v=2"></script>
 <script>
+try{
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const SP=window.DATA.specimens, GL=window.DATA.glazes;
 const GMAP=Object.fromEntries(GL.map(g=>[g.no,g]));
-const FAMS=window.DATA.fams;
+const FAMS=(window.DATA&&window.DATA.fams)||['백','미색','크림','베이지','연갈','갈','흑갈','자주·팥','분홍','황','카키','올리브','연두','녹','진녹','청록','하늘','파랑','남색','보라','밝은회','회','흑'];
 
 /* ---------- persistent state ---------- */
 const LSKEY='glazedb:v1';
@@ -186,7 +182,7 @@ const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
 const makeable=s=>ownedBrush(s.u)&&ownedBrush(s.o);
 
 /* ---------- filter state ---------- */
-const F={fams:new Set(),glaze:'',pos:'any',make:false,star:false,tag:'',sort:'hue'};
+const F={fams:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
 let curTab='spec', glazeDetail=null;
 
 /* ---------- family chips ---------- */
@@ -205,7 +201,6 @@ FAMS.forEach(f=>{
 /* ---------- controls ---------- */
 $('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('');
 $('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
-$('#posSel').onchange=e=>{F.pos=e.target.value;render()};
 $('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
 $('#starBtn').onclick=()=>{F.star=!F.star;$('#starBtn').setAttribute('aria-pressed',F.star);render()};
 $('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
@@ -220,8 +215,7 @@ function refreshTagSel(){
 function filtered(){
   let xs=SP;
   if(F.fams.size)xs=xs.filter(s=>F.fams.has(s.fam));
-  if(F.glaze){const g=+F.glaze;
-    xs=xs.filter(s=>F.pos==='u'?s.u===g:F.pos==='o'?s.o===g:(s.u===g||s.o===g));}
+  if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
   if(F.make)xs=xs.filter(makeable);
   if(F.star)xs=xs.filter(s=>store.stars[s.code]);
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
@@ -387,6 +381,7 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
 
 $('#totalCount').textContent=`이중시유 ${SP.length} · 유약 ${GL.length}`;
 render();
+}catch(err){document.body.insertAdjacentHTML('beforeend','<div style="padding:24px;color:#A6402F">문제가 생겼어요: '+err.message+'<br>새로고침(캐시 지우기)을 해보세요.</div>');}
 </script>
 </body>
 </html>
