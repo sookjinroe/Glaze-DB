@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>유약 시편 — 이중시유 DB</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F3EF; --card:#FFFFFF; --ink:#23211D; --sub:#7A756C;
+  --line:#E2DFD8; --accent:#4E7A70; --accent-ink:#FFFFFF;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'Pretendard Variable',Pretendard,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+img{display:block}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- header ---------- */
+header{padding:18px 16px 0;max-width:1080px;margin:0 auto}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brand .count{font-family:var(--mono);font-size:12px;color:var(--sub)}
+nav.tabs{display:flex;gap:4px;margin-top:12px;border-bottom:1px solid var(--line)}
+nav.tabs button{padding:9px 14px;font-weight:600;color:var(--sub);border-bottom:2px solid transparent;margin-bottom:-1px}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+
+/* ---------- toolbar ---------- */
+.toolbar{position:sticky;top:0;z-index:20;background:linear-gradient(var(--bg) 85%,rgba(244,243,239,0));padding:10px 16px 12px;max-width:1080px;margin:0 auto}
+.famrow{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
+.famrow::-webkit-scrollbar{display:none}
+.fam{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;width:46px}
+.fam .dot{width:32px;height:32px;border-radius:50%;border:1px solid rgba(0,0,0,.12);box-shadow:inset 0 -6px 10px rgba(255,255,255,.25), inset 0 4px 6px rgba(0,0,0,.12)}
+.fam span{font-size:10.5px;color:var(--sub);white-space:nowrap}
+.fam[aria-pressed="true"] .dot{box-shadow:0 0 0 2.5px var(--bg),0 0 0 4.5px var(--ink)}
+.fam[aria-pressed="true"] span{color:var(--ink);font-weight:700}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600}
+.chip[aria-pressed="true"],.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+select.chip{appearance:none;padding-right:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A756C' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.result{font-size:12.5px;color:var(--sub);margin-top:8px}
+.result b{color:var(--ink)}
+
+/* ---------- grid ---------- */
+main{max-width:1080px;margin:0 auto;padding:4px 16px 80px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
+@media(min-width:720px){.grid{grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:14px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center;padding-bottom:8px;position:relative;transition:transform .12s}
+.card:active{transform:scale(.97)}
+.card img{width:100%;aspect-ratio:116/132;object-fit:cover}
+.sticker{display:inline-block;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:3px;padding:1px 7px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.02em}
+.card .star{position:absolute;top:5px;right:6px;font-size:12px;color:#E0A422;text-shadow:0 0 3px #fff}
+.card .nomake{position:absolute;top:5px;left:6px;font-size:10px;background:rgba(255,255,255,.85);border-radius:3px;padding:1px 4px;color:var(--sub)}
+.empty{padding:56px 12px;text-align:center;color:var(--sub)}
+.empty b{color:var(--ink)}
+
+/* ---------- glaze tab ---------- */
+.glist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;text-align:left}
+.gcard img,.gcard .ph{width:52px;height:52px;border-radius:8px;object-fit:cover;flex:none}
+.gcard .ph{background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:11px}
+.gcard .no{font-family:var(--mono);font-size:11px;color:var(--sub)}
+.gcard .nm{font-weight:700;font-size:14px}
+.gcard .own{font-size:11px;color:var(--sub);margin-top:2px}
+.gcard .own .y{color:var(--accent);font-weight:700}
+.backbar{display:flex;align-items:center;gap:10px;margin:6px 0 14px}
+.backbar button{font-weight:700;color:var(--accent)}
+.gsec{margin:18px 0 8px;font-size:13px;font-weight:700;color:var(--sub)}
+.gsec b{color:var(--ink);font-size:15px}
+
+/* ---------- settings ---------- */
+.settings{max-width:640px}
+.settings p.help{color:var(--sub);font-size:13.5px}
+table.own{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table.own th,table.own td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+table.own th{font-size:12px;color:var(--sub);font-weight:600;background:#FAF9F6}
+table.own td.c{text-align:center}
+table.own input{width:18px;height:18px;accent-color:var(--accent)}
+table.own .no{font-family:var(--mono);font-size:12px;color:var(--sub)}
+.iohd{margin:26px 0 6px;font-weight:700}
+textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:var(--mono);font-size:11px;background:var(--card)}
+.btnrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 14px;font-weight:600;font-size:13.5px}
+.btn.warn{color:#A6402F}
+
+/* ---------- detail sheet ---------- */
+.scrim{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .18s}
+.scrim.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(102%);transition:transform .22s cubic-bezier(.3,.9,.4,1);max-height:88dvh;overflow-y:auto;padding:14px 18px calc(20px + env(safe-area-inset-bottom))}
+.sheet.open{transform:translateY(0)}
+@media(min-width:720px){.sheet{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-46%) scale(.97);opacity:0;width:420px;border-radius:16px;max-height:86vh}
+.sheet.open{transform:translate(-50%,-50%) scale(1);opacity:1}}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 12px}
+@media(min-width:720px){.grab{display:none}}
+.dhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dcode{font-family:var(--mono);font-size:22px;font-weight:600}
+.dfam{font-size:12px;color:var(--sub)}
+.dimg{width:min(240px,70%);margin:14px auto;border-radius:10px;border:1px solid var(--line)}
+.stars{display:flex;gap:4px;justify-content:center;margin:2px 0 14px}
+.stars button{font-size:24px;color:#D8D4CB;padding:2px 4px}
+.stars button.on{color:#E0A422}
+.recipe{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rrow{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--card)}
+.rrow + .rrow{border-top:1px dashed var(--line)}
+.rrow img,.rrow .ph{width:44px;height:44px;border-radius:8px;object-fit:cover;flex:none}
+.rrow .ph{background:var(--line)}
+.rrow .role{font-size:11px;color:var(--sub);width:56px;flex:none}
+.rrow .gname{font-weight:700}
+.rrow .gno{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
+.rrow .ownb{margin-left:auto;font-size:11px;color:var(--sub)}
+.rrow .ownb.y{color:var(--accent);font-weight:700}
+.makeline{margin:10px 2px 0;font-size:13px;color:var(--sub)}
+.makeline.y{color:var(--accent);font-weight:600}
+.revchip{display:inline-flex;align-items:center;gap:6px;margin-top:14px;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;background:var(--bg)}
+.revchip .rc{font-family:var(--mono)}
+.thd{margin:20px 0 8px;font-size:13px;font-weight:700;color:var(--sub)}
+.tagwrap{display:flex;gap:6px;flex-wrap:wrap}
+.tag{border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--card)}
+.tag.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.tagadd{display:flex;gap:6px;margin-top:8px}
+.tagadd input{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:var(--card)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><h1>유약 시편</h1><span class="count" id="totalCount"></span></div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="spec">시편</button>
+    <button role="tab" aria-selected="false" data-tab="glaze">유약</button>
+    <button role="tab" aria-selected="false" data-tab="set">설정</button>
+  </nav>
+</header>
+
+<div class="toolbar" id="toolbar">
+  <div class="famrow" id="famRow"></div>
+  <div class="ctrl">
+    <select class="chip" id="glazeSel"></select>
+    <select class="chip" id="posSel">
+      <option value="any">위치 무관</option>
+      <option value="u">밑유약으로</option>
+      <option value="o">윗유약으로</option>
+    </select>
+    <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
+    <button class="chip" id="starBtn" aria-pressed="false">★ 즐겨찾기</button>
+    <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
+    <select class="chip" id="sortSel">
+      <option value="hue">색상환순</option>
+      <option value="light">밝은순</option>
+      <option value="dark">어두운순</option>
+      <option value="code">코드순</option>
+    </select>
+  </div>
+  <div class="result" id="resultLine"></div>
+</div>
+
+<main>
+  <section id="specView"><div class="grid" id="grid"></div><div class="empty" id="emptyMsg" hidden></div></section>
+  <section id="glazeView" hidden></section>
+  <section id="setView" class="settings" hidden></section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+
+<script src="data.js"></script>
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const SP=window.DATA.specimens, GL=window.DATA.glazes;
+const GMAP=Object.fromEntries(GL.map(g=>[g.no,g]));
+const FAMS=['백·미색','베이지','갈색','황·올리브','녹색','청록','파랑','보라','분홍·자주','회색','흑색'];
+
+/* ---------- persistent state ---------- */
+const LSKEY='glazedb:v1';
+let store={owned:{},stars:{},tags:{}};
+try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
+const save=()=>{try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}};
+const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
+const makeable=s=>ownedBrush(s.u)&&ownedBrush(s.o);
+
+/* ---------- filter state ---------- */
+const F={fams:new Set(),glaze:'',pos:'any',make:false,star:false,tag:'',sort:'hue'};
+let curTab='spec', glazeDetail=null;
+
+/* ---------- family chips ---------- */
+function famAvg(f){const xs=SP.filter(s=>s.fam===f); if(!xs.length)return '#CCC';
+ const m=c=>Math.round(xs.reduce((a,s)=>a+parseInt(s.hex.substr(c,2),16),0)/xs.length);
+ return '#'+[m(1),m(3),m(5)].map(v=>v.toString(16).padStart(2,'0')).join('');}
+FAMS.forEach(f=>{
+  const n=SP.filter(s=>s.fam===f).length; if(!n)return;
+  const b=document.createElement('button'); b.className='fam'; b.setAttribute('aria-pressed','false');
+  b.innerHTML=`<span class="dot" style="background:${famAvg(f)}"></span><span>${f}</span>`;
+  b.onclick=()=>{F.fams.has(f)?F.fams.delete(f):F.fams.add(f);
+    b.setAttribute('aria-pressed',F.fams.has(f)); render();};
+  $('#famRow').appendChild(b);
+});
+
+/* ---------- controls ---------- */
+$('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('');
+$('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
+$('#posSel').onchange=e=>{F.pos=e.target.value;render()};
+$('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
+$('#starBtn').onclick=()=>{F.star=!F.star;$('#starBtn').setAttribute('aria-pressed',F.star);render()};
+$('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
+$('#sortSel').onchange=e=>{F.sort=e.target.value;render()};
+function refreshTagSel(){
+  const names=Object.keys(store.tags).sort();
+  $('#tagSel').innerHTML='<option value="">태그 전체</option>'+names.map(t=>`<option ${F.tag===t?'selected':''}>${t}</option>`).join('');
+  if(F.tag&&!names.includes(F.tag))F.tag='';
+}
+
+/* ---------- filtering ---------- */
+function filtered(){
+  let xs=SP;
+  if(F.fams.size)xs=xs.filter(s=>F.fams.has(s.fam));
+  if(F.glaze){const g=+F.glaze;
+    xs=xs.filter(s=>F.pos==='u'?s.u===g:F.pos==='o'?s.o===g:(s.u===g||s.o===g));}
+  if(F.make)xs=xs.filter(makeable);
+  if(F.star)xs=xs.filter(s=>store.stars[s.code]);
+  if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
+  const by={hue:(a,b)=>a.hue-b.hue||a.l-b.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
+    code:(a,b)=>a.u-b.u||a.o-b.o};
+  return [...xs].sort(by[F.sort]);
+}
+
+/* ---------- render: gallery ---------- */
+function cardHTML(s){
+  const st=store.stars[s.code];
+  return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.code}">
+    <img src="crops/${s.file}" alt="" loading="lazy">
+    ${st?`<span class="star">${'★'.repeat(st)}</span>`:''}
+    <span class="sticker">${s.code}</span></button>`;
+}
+function render(){
+  refreshTagSel();
+  if(curTab!=='spec')return renderTab();
+  const xs=filtered();
+  $('#grid').innerHTML=xs.map(cardHTML).join('');
+  $('#emptyMsg').hidden=xs.length>0;
+  $('#emptyMsg').innerHTML='조건에 맞는 시편이 없어요.<br>필터를 하나 풀어보세요.';
+  $('#resultLine').innerHTML=`<b>${xs.length}</b> / ${SP.length}개`;
+}
+$('#grid').addEventListener('click',e=>{
+  const c=e.target.closest('.card'); if(c)openSheet(c.dataset.code);
+});
+
+/* ---------- detail sheet ---------- */
+function glazeRow(role,no){
+  const g=GMAP[no], ob=ownedBrush(no);
+  const img=g.file?`<img src="singles/${g.file}" alt="">`:'<span class="ph"></span>';
+  return `<div class="rrow">${img}<span class="role">${role}</span>
+    <span><span class="gname">${g.name}</span> <span class="gno">${no}</span></span>
+    <span class="ownb ${ob?'y':''}">${ob?'붓 보유':'붓 미보유'}</span></div>`;
+}
+function openSheet(code){
+  const s=SP.find(x=>x.code===code); if(!s)return;
+  const mk=makeable(s), st=store.stars[code]||0;
+  const tagNames=Object.keys(store.tags).sort();
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode">${s.code}</span><span class="dfam">${s.fam} · ${s.hex}</span></div>
+    <img class="dimg" src="crops/${s.file}" alt="시편 ${s.code}">
+    <div class="stars" role="group" aria-label="별점">
+      ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
+    </div>
+    <div class="recipe">${glazeRow('먼저 2회',s.u)}${glazeRow('위에 2회',s.o)}</div>
+    <div class="makeline ${mk?'y':''}">${mk?'지금 공방 재고로 만들 수 있어요':'붓시유용 유약이 부족해요 — 설정에서 보유를 확인하세요'}</div>
+    ${s.rev?`<button class="revchip" data-open="${s.rev}">순서 뒤집기 → <span class="rc">${s.rev}</span></button>`:''}
+    <div class="thd">태그</div>
+    <div class="tagwrap">${tagNames.map(t=>{
+      const on=(store.tags[t]||[]).includes(code);
+      return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
+    <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>`;
+  $('#sheet').dataset.code=code;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeSheet(){$('#scrim').classList.remove('open');$('#sheet').classList.remove('open');
+  document.body.style.overflow='';render();}
+$('#scrim').onclick=closeSheet;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+$('#sheet').addEventListener('click',e=>{
+  const code=$('#sheet').dataset.code;
+  const st=e.target.closest('[data-star]');
+  if(st){const n=+st.dataset.star;
+    store.stars[code]=(store.stars[code]===n)?0:n;
+    if(!store.stars[code])delete store.stars[code];
+    save();openSheet(code);return;}
+  const tg=e.target.closest('.tag');
+  if(tg){const t=tg.dataset.tag, arr=store.tags[t]||[];
+    store.tags[t]=arr.includes(code)?arr.filter(c=>c!==code):[...arr,code];
+    save();openSheet(code);return;}
+  if(e.target.id==='addTag'){const v=$('#newTag').value.trim();
+    if(v){store.tags[v]=store.tags[v]||[];
+      if(!store.tags[v].includes(code))store.tags[v].push(code);
+      save();openSheet(code);}return;}
+  const rv=e.target.closest('[data-open]');
+  if(rv){openSheet(rv.dataset.open);return;}
+});
+
+/* ---------- glaze tab ---------- */
+function ownText(no){const o=store.owned[no]||{};
+  const parts=[]; if(o.b)parts.push('<span class="y">붓</span>'); if(o.d)parts.push('<span class="y">담금</span>');
+  return parts.length?('보유: '+parts.join(' · ')):'미보유';}
+function renderGlazeList(){
+  glazeDetail=null;
+  $('#glazeView').innerHTML='<div class="glist">'+GL.map(g=>{
+    const n=SP.filter(s=>s.u===g.no||s.o===g.no).length;
+    const img=g.file?`<img src="singles/${g.file}" alt="">`:'<span class="ph">사진 없음</span>';
+    return `<button class="gcard" data-g="${g.no}">${img}
+      <span><span class="no">${g.no}</span> <span class="nm">${g.name}</span>
+      <div class="own">${ownText(g.no)} · 조합 ${n}개</div></span></button>`;
+  }).join('')+'</div>';
+}
+function renderGlazeDetail(no){
+  glazeDetail=no; const g=GMAP[no];
+  const under=SP.filter(s=>s.u===no), over=SP.filter(s=>s.o===no);
+  const grid=xs=>'<div class="grid">'+[...xs].sort((a,b)=>a.hue-b.hue).map(cardHTML).join('')+'</div>';
+  $('#glazeView').innerHTML=`
+    <div class="backbar"><button id="gBack">← 유약 전체</button>
+      <span class="nm" style="font-weight:800">${g.no} ${g.name}</span>
+      <span style="font-size:12px;color:var(--sub)">${ownText(no)}</span></div>
+    ${g.file?`<img src="singles/${g.file}" alt="${g.name} 단일 시유" style="width:150px;border-radius:12px;border:1px solid var(--line)">`:''}
+    <div class="gsec">밑유약으로 쓴 조합 <b>${under.length}</b></div>${under.length?grid(under):'<div class="empty">없음</div>'}
+    <div class="gsec">윗유약으로 쓴 조합 <b>${over.length}</b></div>${over.length?grid(over):'<div class="empty">없음</div>'}`;
+}
+$('#glazeView').addEventListener('click',e=>{
+  if(e.target.id==='gBack')return renderGlazeList();
+  const c=e.target.closest('.card'); if(c)return openSheet(c.dataset.code);
+  const gc=e.target.closest('.gcard'); if(gc)renderGlazeDetail(+gc.dataset.g);
+});
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  $('#setView').innerHTML=`
+    <p class="help">공방에 있는 유약을 체크해두면 갤러리의 <b>지금 만들 수 있는 것</b> 필터가 작동해요.
+    이중시유는 붓시유용으로만 가능해서, 조합 재현 가능 여부는 <b>붓시유용 보유</b> 기준으로 판단합니다.</p>
+    <table class="own"><thead><tr><th>유약</th><th style="text-align:center">붓시유용</th><th style="text-align:center">담금용</th></tr></thead>
+    <tbody>${GL.map(g=>{const o=store.owned[g.no]||{};
+      return `<tr><td><span class="no">${g.no}</span> ${g.name}</td>
+        <td class="c"><input type="checkbox" data-no="${g.no}" data-f="b" ${o.b?'checked':''} aria-label="${g.name} 붓시유용 보유"></td>
+        <td class="c"><input type="checkbox" data-no="${g.no}" data-f="d" ${o.d?'checked':''} aria-label="${g.name} 담금용 보유"></td></tr>`;}).join('')}
+    </tbody></table>
+    <div class="iohd">데이터 백업</div>
+    <p class="help">보유·별점·태그는 이 기기에만 저장돼요. 다른 기기로 옮기려면 아래 내용을 복사해서 그 기기의 가져오기에 붙여넣으세요.</p>
+    <textarea class="io" id="ioBox">${JSON.stringify(store)}</textarea>
+    <div class="btnrow">
+      <button class="btn" id="ioImport">가져오기 (위 내용 적용)</button>
+      <button class="btn warn" id="ioReset">모두 초기화</button>
+    </div>`;
+}
+$('#setView').addEventListener('change',e=>{
+  const el=e.target; if(!el.dataset.no)return;
+  const no=+el.dataset.no; store.owned[no]=store.owned[no]||{};
+  store.owned[no][el.dataset.f]=el.checked; save();
+});
+$('#setView').addEventListener('click',e=>{
+  if(e.target.id==='ioImport'){try{
+      const v=JSON.parse($('#ioBox').value);
+      store=Object.assign({owned:{},stars:{},tags:{}},v);save();renderSettings();alert('가져왔어요.');
+    }catch(err){alert('형식이 올바르지 않아요. 내보내기 내용을 그대로 붙여넣어 주세요.');}}
+  if(e.target.id==='ioReset'&&confirm('보유·별점·태그를 모두 지울까요?')){
+    store={owned:{},stars:{},tags:{}};save();renderSettings();}
+});
+
+/* ---------- tabs ---------- */
+function renderTab(){
+  $('#specView').hidden=curTab!=='spec';
+  $('#glazeView').hidden=curTab!=='glaze';
+  $('#setView').hidden=curTab!=='set';
+  $('#toolbar').style.display=curTab==='spec'?'':'none';
+  if(curTab==='spec')render();
+  if(curTab==='glaze')(glazeDetail?renderGlazeDetail(glazeDetail):renderGlazeList());
+  if(curTab==='set')renderSettings();
+}
+$$('nav.tabs button').forEach(b=>b.onclick=()=>{
+  curTab=b.dataset.tab;
+  $$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  renderTab();
+});
+
+$('#totalCount').textContent=`이중시유 ${SP.length} · 유약 ${GL.length}`;
+render();
+</script>
+</body>
+</html>
