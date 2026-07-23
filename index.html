@@ -168,7 +168,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
 
-<script src="data.js?v=10"></script>
+<script src="data.js?v=11"></script>
 <script>
 try{
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -180,9 +180,58 @@ const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈',
 const LSKEY='glazedb:v1';
 let store={owned:{},stars:{},tags:{}};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
-const save=()=>{try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}};
+const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
 const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
 const makeable=s=>ownedBrush(s.u)&&ownedBrush(s.o);
+
+
+/* ---------- gist sync ---------- */
+const TKEY='glazedb:gisttoken', GKEY='glazedb:gistid', FNAME='glaze-db-sync.json';
+const getToken=()=>localStorage.getItem(TKEY)||'';
+let syncTimer=null, syncState='';
+function setSyncState(msg){syncState=msg;const el=document.querySelector('#syncState');if(el)el.textContent=msg;}
+async function gh(path,opt={}){
+  const r=await fetch('https://api.github.com'+path,Object.assign({headers:{
+    'Authorization':'token '+getToken(),'Accept':'application/vnd.github+json'}},opt));
+  if(!r.ok)throw new Error('GitHub '+r.status);
+  return r.status===204?null:r.json();
+}
+async function findGist(){
+  let id=localStorage.getItem(GKEY);
+  if(id){try{await gh('/gists/'+id);return id;}catch(e){localStorage.removeItem(GKEY);}}
+  const list=await gh('/gists?per_page=100');
+  const hit=list.find(g=>g.files&&g.files[FNAME]);
+  if(hit){localStorage.setItem(GKEY,hit.id);return hit.id;}
+  const made=await gh('/gists',{method:'POST',body:JSON.stringify({
+    description:'Glaze DB sync',public:false,
+    files:{[FNAME]:{content:JSON.stringify(store)}}})});
+  localStorage.setItem(GKEY,made.id);return made.id;
+}
+async function pushStore(){
+  if(!getToken())return;
+  try{setSyncState('저장 중…');
+    const id=await findGist();
+    await gh('/gists/'+id,{method:'PATCH',body:JSON.stringify({
+      files:{[FNAME]:{content:JSON.stringify(store)}}})});
+    setSyncState('동기화됨 · '+new Date().toLocaleTimeString());
+  }catch(e){setSyncState('동기화 실패: '+e.message);}
+}
+function queueSync(){if(!getToken())return;clearTimeout(syncTimer);syncTimer=setTimeout(pushStore,2000);}
+async function pullStore(){
+  if(!getToken())return;
+  try{setSyncState('불러오는 중…');
+    const id=await findGist();
+    const g=await gh('/gists/'+id);
+    const remote=JSON.parse(g.files[FNAME].content);
+    if((remote._ts||0)>(store._ts||0)){
+      store=Object.assign({owned:{},stars:{},tags:{}},remote);
+      try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
+      render();
+    }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
+    setSyncState('동기화됨 · '+new Date().toLocaleTimeString());
+  }catch(e){setSyncState('동기화 실패: '+e.message);}
+}
+if(getToken())pullStore();
 
 /* ---------- filter state ---------- */
 const F={grps:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
@@ -352,6 +401,11 @@ function renderSettings(){
         <td class="c"><input type="checkbox" data-no="${g.no}" data-f="b" ${o.b?'checked':''} aria-label="${g.name} 붓시유용 보유"></td>
         <td class="c"><input type="checkbox" data-no="${g.no}" data-f="d" ${o.d?'checked':''} aria-label="${g.name} 담금용 보유"></td></tr>`;}).join('')}
     </tbody></table>
+    <div class="iohd">기기 간 동기화</div>
+    <p class="help">GitHub 토큰(gist 권한만)을 붙여넣으면 즐겨찾기·별점·태그·보유가 비공개 gist에 자동 저장되고, 같은 토큰을 넣은 다른 기기와 연동돼요.</p>
+    <div class="tagadd"><input id="ghToken" placeholder="ghp_… (gist 권한 토큰)" value="${getToken()?'●●●●●● 저장됨':''}"><button class="btn" id="ghSave">연결</button></div>
+    <div class="btnrow"><button class="btn" id="ghPull">지금 불러오기</button><button class="btn" id="ghPush">지금 저장하기</button><button class="btn warn" id="ghOff">연결 해제</button></div>
+    <p class="help" id="syncState">${getToken()?syncState||'연결됨':'연결 안 됨'}</p>
     <div class="iohd">데이터 백업</div>
     <p class="help">보유·별점·태그는 이 기기에만 저장돼요. 다른 기기로 옮기려면 아래 내용을 복사해서 그 기기의 가져오기에 붙여넣으세요.</p>
     <textarea class="io" id="ioBox">${JSON.stringify(store)}</textarea>
@@ -366,6 +420,12 @@ $('#setView').addEventListener('change',e=>{
   store.owned[no][el.dataset.f]=el.checked; save();
 });
 $('#setView').addEventListener('click',e=>{
+  if(e.target.id==='ghSave'){const v=$('#ghToken').value.trim();
+    if(v&&!v.includes('●')){localStorage.setItem(TKEY,v);pullStore();renderSettings();}return;}
+  if(e.target.id==='ghPull'){pullStore();return;}
+  if(e.target.id==='ghPush'){pushStore();return;}
+  if(e.target.id==='ghOff'&&confirm('이 기기의 동기화 연결을 해제할까요? (gist 데이터는 남아요)')){
+    localStorage.removeItem(TKEY);localStorage.removeItem(GKEY);renderSettings();return;}
   if(e.target.id==='ioImport'){try{
       const v=JSON.parse($('#ioBox').value);
       store=Object.assign({owned:{},stars:{},tags:{}},v);save();renderSettings();alert('가져왔어요.');
