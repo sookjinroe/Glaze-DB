@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>유약 시편 — 이중시유 DB</title>
+<meta name="theme-color" content="#F4F3EF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="유약시편">
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -450,6 +456,18 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
   renderTab();
 });
 
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+(function(){
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+  if(ios&&!standalone&&!localStorage.getItem('glazedb:hint')){
+    const b=document.createElement('div');
+    b.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:60;background:#23211D;color:#fff;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5;box-shadow:0 6px 24px rgba(0,0,0,.25)';
+    b.innerHTML='공유 버튼 → <b>홈 화면에 추가</b>를 누르면 앱처럼 쓸 수 있고, 즐겨찾기도 안전하게 보관돼요. <button id="hintX" style="float:right;color:#fff;font-weight:700;margin-left:10px">닫기</button>';
+    document.body.appendChild(b);
+    b.querySelector('#hintX').onclick=()=>{localStorage.setItem('glazedb:hint','1');b.remove();};
+  }
+})();
 $('#totalCount').textContent=`이중시유 ${SP.length} · 유약 ${GL.length}`;
 render();
 }catch(err){document.body.insertAdjacentHTML('beforeend','<div style="padding:24px;color:#A6402F">문제가 생겼어요: '+err.message+'<br>새로고침(캐시 지우기)을 해보세요.</div>');}

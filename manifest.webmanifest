@@ -1,0 +1,16 @@
+{
+  "name": "유약 시편",
+  "short_name": "유약시편",
+  "description": "중앙도재 이중시유 시편 402종 탐색기",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4F3EF",
+  "theme_color": "#F4F3EF",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
