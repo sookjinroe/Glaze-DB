@@ -175,12 +175,9 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
     <select class="chip" id="glazeSel"></select>
     <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
     <button class="chip" id="mineBtn" aria-pressed="false">내 시편</button>
-    <select class="chip" id="starSel">
-      <option value="0">별점 전체</option>
-      <option value="1">★</option>
-      <option value="2">★★</option>
-      <option value="3">★★★</option>
-    </select>
+    <button class="chip" data-starf="1" aria-pressed="false">★</button>
+    <button class="chip" data-starf="2" aria-pressed="false">★★</button>
+    <button class="chip" data-starf="3" aria-pressed="false">★★★</button>
     <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
     <select class="chip" id="sortSel">
       <option value="hue">색 그룹순</option>
@@ -447,7 +444,7 @@ async function ensurePhotos(){
 if(getToken())pullStore();
 
 /* ---------- filter state ---------- */
-const F={grps:new Set(),glaze:'',make:false,mine:false,star:0,tag:'',sort:'hue'};
+const F={grps:new Set(),glaze:'',make:false,mine:false,stars:new Set(),tag:'',sort:'hue'};
 let curTab='spec', glazeDetail=null;
 
 /* ---------- group chips ---------- */
@@ -465,7 +462,12 @@ $('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<o
 $('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
 $('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
 $('#mineBtn').onclick=()=>{F.mine=!F.mine;$('#mineBtn').setAttribute('aria-pressed',F.mine);render()};
-$('#starSel').onchange=e=>{F.star=+e.target.value;render()};
+$$('[data-starf]').forEach(b=>b.onclick=()=>{
+  const n=+b.dataset.starf;
+  F.stars.has(n)?F.stars.delete(n):F.stars.add(n);
+  b.setAttribute('aria-pressed',F.stars.has(n));
+  render();
+});
 $('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
 $('#sortSel').onchange=e=>{F.sort=e.target.value;render()};
 function refreshTagSel(){
@@ -481,7 +483,7 @@ function filtered(){
   if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
   if(F.make)xs=xs.filter(makeable);
   if(F.mine)xs=xs.filter(s=>s.mine||(s.my&&s.my.photos&&s.my.photos.length));
-  if(F.star)xs=xs.filter(s=>(store.stars[s.code]||0)===F.star);
+  if(F.stars.size)xs=xs.filter(s=>F.stars.has(store.stars[s.code]||0));
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
   const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
     code:(a,b)=>a.u-b.u||a.o-b.o};
