@@ -902,7 +902,6 @@ function openWorkSheet(id,viewPid){
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
   const reopen=p=>openWorkSheet(id,p||w.main);
-  const wm={...w, main:w.main};
   wirePhotoMgmt(w,viewPid,reopen);
   wireMemoEdit(w,()=>reopen(viewPid));
   $('#glazesEdit').onclick=()=>openGlazeSelector(w.glazes||[],sel=>{
@@ -1001,7 +1000,10 @@ function openGlazeSelector(selected,onDone,onCancel,opts){
   $('#pickCancel').onclick=onCancel;
 }
 function ensureEntry(s){
-  let e=(store.mine||[]).find(m=>m.uNo===s.u&&m.oNo===s.o&&m.uNo!=null&&m.oNo!=null);
+  let e=(store.mine||[]).find(m=>{
+    const st=m.stack||[];
+    return st.length===2&&st[0]===s.u&&st[1]===s.o;
+  });
   if(!e){
     e={id:newId(),disp:s.code,stack:[s.u,s.o],uNo:s.u,oNo:s.o,
        uName:GMAP[s.u]?GMAP[s.u].name:'',oName:GMAP[s.o]?GMAP[s.o].name:'',
@@ -1137,7 +1139,7 @@ $('#sheet').addEventListener('click',e=>{
 });
 
 /* ---------- glaze tab ---------- */
-function ownText(no){const o=store.owned[no]||{};
+function ownText(no){const o=store.owned[ownedKey(no)]||{};
   const parts=[]; if(o.b)parts.push('<span class="y">붓</span>'); if(o.d)parts.push('<span class="y">담금</span>');
   return parts.length?('보유: '+parts.join(' · ')):'미보유';}
 function renderGlazeList(){
@@ -1165,7 +1167,7 @@ function renderGlazeList(){
 function renderMyGlazeDetail(name){
   glazeDetail='c:'+name;
   const g=myGlaze(name); if(!g)return renderGlazeList();
-  const minespecs=SP.filter(s=>s.mine&&((s.u==null&&s.uName===name)||(s.o==null&&s.oName===name)));
+  const minespecs=SP.filter(s=>s.mine&&specStack(s).includes(name));
   const grid2=xs=>'<div class="grid">'+xs.map(cardHTML).join('')+'</div>';
   $('#glazeView').innerHTML=`
     <div class="backbar"><button id="gBack">← 유약 전체</button>
@@ -1243,7 +1245,8 @@ function openGlazeAdd(){
 function renderGlazeDetail(no){
   glazeDetail=no; const g=GMAP[no];
   const gm=(store.glazeMy||{})[no]||null;
-  const under=SP.filter(s=>s.u===no), over=SP.filter(s=>s.o===no);
+  const under=SP.filter(s=>specStack(s)[0]===no),
+        over=SP.filter(s=>specStack(s).slice(1).includes(no));
   const grid=xs=>'<div class="grid">'+[...xs].sort((a,b)=>a.grp-b.grp||b.l-a.l).map(cardHTML).join('')+'</div>';
   const mainPid=gm?gm.main:'ref';
   const bigSrc=mainPid==='ref'?(g.file?'singles/'+g.file:null):(photoCache[mainPid]||'');
