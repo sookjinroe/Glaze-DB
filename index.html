@@ -639,7 +639,7 @@ function openMineSheet(s,viewPid){
       return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
     <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>
     <div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="${s.id}">이 시편 삭제</button></div>`;
-  $('#sheet').dataset.code=s.code;
+  $('#sheet').dataset.code=s.code;$('#sheet').dataset.mode='spec';
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
   const reopen=p=>{mergeMine();const s2=SP.find(x=>x.code===s.code);if(s2)openMineSheet(s2,p||entry.main);};
@@ -766,6 +766,7 @@ function canvasHex(cv){
   return '#'+hx(r)+hx(g)+hx(b);
 }
 function openCropPick(onDone,onCancel){
+  $('#sheet').dataset.mode='other';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">사진 추가</span></div>
     ${cropUI()}
@@ -788,6 +789,7 @@ function specDraftChips(){
     <span class="tag">${glazeDot(g[1])}윗: ${nm(1)}</span>`;
 }
 function openAddSheet(){
+  $('#sheet').dataset.mode='other';
   if(!specDraft)specDraft={b64:null,memo:'',glazes:[]};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
@@ -868,6 +870,7 @@ function renderWorks(){
 }
 function openWorkSheet(id,viewPid){
   const w=findWork(id); if(!w)return;
+  $('#sheet').dataset.mode='other';
   viewPid=viewPid||w.main;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:19px;font-weight:800">${(w.title||'무제').replace(/</g,'&lt;')}</span><span class="dfam">내 작품</span></div>
@@ -905,6 +908,7 @@ function openWorkSheet(id,viewPid){
 }
 let workDraft=null;
 function openWorkAdd(){
+  $('#sheet').dataset.mode='other';
   if(!workDraft)workDraft={title:'',memo:'',glazes:[],b64:null};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">작품 추가</span></div>
@@ -937,6 +941,7 @@ function openWorkAdd(){
   };
 }
 function openGlazeSelector(selected,onDone,onCancel,opts){
+  $('#sheet').dataset.mode='other';
   opts=opts||{};
   let sel=[...selected];
   const has=p=>sel.includes(p);
@@ -1033,7 +1038,7 @@ function openWallSheet(code,viewPid){
       const on=(store.tags[t]||[]).includes(code);
       return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
     <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>`;
-  $('#sheet').dataset.code=code;
+  $('#sheet').dataset.code=code;$('#sheet').dataset.mode='spec';
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
   const reopen=p=>{mergeMine();openWallSheet(code,p);};
@@ -1096,6 +1101,7 @@ function closeSheet(){$('#scrim').classList.remove('open');$('#sheet').classList
 $('#scrim').onclick=closeSheet;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
 $('#sheet').addEventListener('click',e=>{
+  if($('#sheet').dataset.mode!=='spec')return;
   const code=$('#sheet').dataset.code;
   const st=e.target.closest('[data-star]');
   if(st){const n=+st.dataset.star;
@@ -1187,6 +1193,7 @@ function renderMyGlazeDetail(name){
   ensurePhotos();
 }
 function openGlazeAdd(){
+  $('#sheet').dataset.mode='other';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">내 유약 추가</span></div>
     <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">기본 목록에 없는 유약을 등록해요. 이 기기에 저장돼요.</p>
@@ -1283,6 +1290,9 @@ function renderGlazeDetail(no){
   };
   ensurePhotos();
 }
+$('#workView').addEventListener('click',e=>{
+  const c=e.target.closest('[data-work]'); if(c)openWorkSheet(c.dataset.work);
+});
 $('#glazeView').addEventListener('click',e=>{
   const wk=e.target.closest('[data-work]'); if(wk)return openWorkSheet(wk.dataset.work);
   if(e.target.id==='gBack')return renderGlazeList();
