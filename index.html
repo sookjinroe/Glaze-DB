@@ -216,7 +216,10 @@ const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈',
 const LSKEY='glazedb:v1';
 let store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[],glazeMy:{}};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
-(store.mine||[]).forEach(m=>{if(!m.photos){m.photos=[m.id];m.main=m.id;}});
+(store.mine||[]).forEach(m=>{
+  if(!m.photos){m.photos=[m.id];m.main=m.id;}
+  if(!m.stack)m.stack=[m.uNo!=null?m.uNo:m.uName,m.oNo!=null?m.oNo:m.oName];
+});
 store.works=store.works||[];
 store.works.forEach(w=>{
   if(w.glazes)return;
@@ -256,8 +259,8 @@ const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringi
 const ownedKey=p=>typeof p==='number'?p:'n:'+p;
 const ownedBrush=p=>{const o=store.owned[ownedKey(p)];return !!(o&&o.b);};
 const myGlaze=nm=>(store.myGlazes||[]).find(g=>g.name===nm);
-const specPart=(no,nm)=>no!=null?no:nm;
-const makeable=s=>ownedBrush(specPart(s.u,s.uName!==undefined?s.uName:null))&&ownedBrush(specPart(s.o,s.oName!==undefined?s.oName:null));
+const specStack=s=>s.stack||[s.u,s.o];
+const makeable=s=>specStack(s).every(ownedBrush);
 
 
 /* ---------- gist sync ---------- */
@@ -326,8 +329,10 @@ function assignGrp(hex){
 }
 function mineToSpec(m){
   const {h,l}=hexHL(m.hex);
-  return {code:'u:'+m.id, id:m.id, disp:m.disp, u:m.uNo, o:m.oNo,
-    uName:m.uName, oName:m.oName, hex:m.hex,
+  const st=m.stack||[m.uNo!=null?m.uNo:m.uName,m.oNo!=null?m.oNo:m.oName];
+  return {code:'u:'+m.id, id:m.id, disp:m.disp, stack:st,
+    u:typeof st[0]==='number'?st[0]:null, o:typeof st[1]==='number'?st[1]:null,
+    uName:glazeName(st[0]), oName:st.length>1?glazeName(st[1]):'', hex:m.hex,
     grp:m.grp!=null?m.grp:assignGrp(m.hex), hue:h, l:l,
     rev:null, mine:true, memo:m.memo||'', photos:m.photos, main:m.main};
 }
@@ -342,7 +347,8 @@ function mergeMine(){
     }
   }
   (store.mine||[]).forEach(m=>{
-    const wc=m.uNo!=null&&m.oNo!=null?m.uNo+'-'+m.oNo:null;
+    const st=m.stack||[];
+    const wc=st.length===2&&st.every(p=>typeof p==='number')?st[0]+'-'+st[1]:null;
     const ws=wc&&WALL.has(wc)?SP.find(x=>x.code===wc):null;
     if(ws){
       ws.my=m;
@@ -583,8 +589,8 @@ function wireMemoEdit(entry,reopen){
 }
 const wUses=(w,part)=>(w.glazes||[]).some(x=>x===part);
 function specWorks(s){
-  const p1=s.u!=null?s.u:s.uName, p2=s.o!=null?s.o:s.oName;
-  return (store.works||[]).filter(w=>wUses(w,p1)&&wUses(w,p2));
+  const parts=specStack(s);
+  return (store.works||[]).filter(w=>parts.every(p=>wUses(w,p)));
 }
 const glazeWorks=no=>(store.works||[]).filter(w=>wUses(w,no));
 function workMiniCards(ws,title){
@@ -616,8 +622,9 @@ function openMineSheet(s,viewPid){
   viewPid=viewPid||entry.main;
   const st=store.stars[s.code]||0;
   const tagNames=Object.keys(store.tags).sort();
-  const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
-  const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
+  const stk=specStack(s);
+  const roleOf=i=>stk.length===2?(i===0?'먼저 2회':'위에 2회'):`${i+1}번째`;
+  const rows=stk.map((p,i)=>typeof p==='number'?glazeRow(roleOf(i),p):glazeRowCustom(roleOf(i),p)).join('');
   const ws=specWorks(s);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
@@ -629,10 +636,10 @@ function openMineSheet(s,viewPid){
     <div class="stars" role="group" aria-label="별점">
       ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
     </div>
-    <div class="recipe">${r1}${r2}</div>
+    <div class="recipe">${rows}</div>
     <div class="thd">메모 <button id="memoEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
     <p id="memoView" style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${(s.memo||'—').replace(/</g,'&lt;')}</p>
-    ${workMiniCards(ws,'이 조합의 두 유약을 쓴 작품')}
+    ${workMiniCards(ws,'이 조합의 유약을 모두 쓴 작품')}
     <div class="thd">태그</div>
     <div class="tagwrap">${tagNames.map(t=>{
       const on=(store.tags[t]||[]).includes(s.code);
@@ -782,11 +789,9 @@ function openCropPick(onDone,onCancel){
 /* ---------- add specimen ---------- */
 let specDraft=null;
 function specDraftChips(){
-  const g=specDraft.glazes;
-  const nm=i=>g[i]==null?'—':glazeName(g[i]);
-  return `<span class="tag">${glazeDot(g[0])}밑: ${nm(0)}</span>
-    <span style="align-self:center;color:var(--sub);font-weight:700">→</span>
-    <span class="tag">${glazeDot(g[1])}윗: ${nm(1)}</span>`;
+  return specDraft.glazes.map((p,i)=>
+    `<span class="tag"><b style="margin-right:4px">${i+1}.</b>${glazeDot(p)}${glazeName(p)}</span>`)
+    .join('<span style="align-self:center;color:var(--sub);font-weight:700">→</span>');
 }
 function openAddSheet(){
   $('#sheet').dataset.mode='other';
@@ -795,7 +800,7 @@ function openAddSheet(){
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
     <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">이 시편은 이 기기에 저장돼요.</p>
     ${specDraft.b64?`<img class="dimg" src="data:image/jpeg;base64,${specDraft.b64}" alt="">`:cropUI()}
-    <div class="formrow"><label>유약 (탭 순서 = 시유 순서, 2개)</label>
+    <div class="formrow"><label>유약 (탭 순서 = 시유 순서, 2개 이상)</label>
       <div class="tagwrap" style="margin-bottom:6px">${specDraft.glazes.length?specDraftChips():''}</div>
       <button class="btn" id="sGlz">유약 선택${specDraft.glazes.length?' 수정':''}</button></div>
     <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo">${specDraft.memo}</textarea></div>
@@ -809,7 +814,7 @@ function openAddSheet(){
   $('#sGlz').onclick=()=>{grab();
     openGlazeSelector(specDraft.glazes,sel=>{specDraft.glazes=sel;openAddSheet();},
       ()=>openAddSheet(),
-      {max:2,title:'시편 유약 선택',hint:'첫 번째 탭 = 밑유약(먼저 시유), 두 번째 탭 = 윗유약이에요.'});};
+      {title:'시편 유약 선택',hint:'탭한 순서대로 시유한 것으로 기록돼요 (2개 이상).'});};
   $('#addSubmit').onclick=submitAdd;
 }
 async function submitAdd(){
@@ -817,12 +822,12 @@ async function submitAdd(){
     if(!specDraft.b64&&crop.img)specDraft.b64=cropToCanvas().toDataURL('image/jpeg',0.88).split(',')[1];};
   grab();
   if(!specDraft.b64){alert('사진을 선택해주세요.');return;}
-  if(specDraft.glazes.length!==2){alert('밑유약과 윗유약, 순서대로 2개를 선택해주세요.');return;}
+  if(specDraft.glazes.length<2){alert('유약을 시유 순서대로 2개 이상 선택해주세요.');return;}
   const st=$('#addState');st.textContent='등록 중…';
   try{
-    const [g1,g2]=specDraft.glazes;
-    const uNo=typeof g1==='number'?g1:null, oNo=typeof g2==='number'?g2:null;
-    const uName=glazeName(g1), oName=glazeName(g2);
+    const stk=[...specDraft.glazes];
+    const uNo=typeof stk[0]==='number'?stk[0]:null, oNo=typeof stk[1]==='number'?stk[1]:null;
+    const uName=glazeName(stk[0]), oName=glazeName(stk[1]);
     const b64=specDraft.b64;
     const im=new Image();
     await new Promise(res=>{im.onload=res;im.src='data:image/jpeg;base64,'+b64;});
@@ -830,13 +835,16 @@ async function submitAdd(){
     cv.getContext('2d').drawImage(im,0,0);
     const hex=canvasHex(cv);
     const id=newId(), pid=newId();
-    const disp=(uNo??uName)+'-'+(oNo??oName);
+    const disp=stk.map(p=>typeof p==='number'?p:glazeName(p)).join('-');
     const memo=specDraft.memo.trim();
     await idb.put(pid,b64);
     photoCache[pid]=b64url(b64);
     if(getToken())pushPhoto(pid,b64).catch(()=>{});
     store.mine=store.mine||[];
-    const dup=store.mine.find(m=>m.uNo===uNo&&m.oNo===oNo&&m.uName===uName&&m.oName===oName);
+    const dup=store.mine.find(m=>{
+      const ms=m.stack||[];
+      return ms.length===stk.length&&ms.every((p,i)=>p===stk[i]);
+    });
     if(dup){
       dup.photos.push(pid);dup.main=pid;
       dup.hex=hex;dup.grp=assignGrp(hex);
@@ -844,7 +852,7 @@ async function submitAdd(){
       save();specDraft=null;closeSheet();
       alert('이미 있는 '+disp+' 시편에 사진으로 추가했어요. 새 사진이 메인이 됐고, 메인은 상세에서 바꿀 수 있어요.');
     }else{
-      store.mine.push({id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
+      store.mine.push({id,disp,stack:stk,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
         memo,ts:Date.now(),photos:[pid],main:pid});
       save();specDraft=null;closeSheet();
       if(WALL.has(disp))alert(disp+' 카드에 내 사진으로 추가됐어요. 중앙도재 사진은 참조로 남아 있어요.');
@@ -988,7 +996,7 @@ function openGlazeSelector(selected,onDone,onCancel,opts){
 function ensureEntry(s){
   let e=(store.mine||[]).find(m=>m.uNo===s.u&&m.oNo===s.o&&m.uNo!=null&&m.oNo!=null);
   if(!e){
-    e={id:newId(),disp:s.code,uNo:s.u,oNo:s.o,
+    e={id:newId(),disp:s.code,stack:[s.u,s.o],uNo:s.u,oNo:s.o,
        uName:GMAP[s.u]?GMAP[s.u].name:'',oName:GMAP[s.o]?GMAP[s.o].name:'',
        hex:s.hex,grp:s.grp,memo:'',ts:Date.now(),photos:[],main:'ref'};
     store.mine=store.mine||[];store.mine.push(e);
