@@ -984,13 +984,36 @@ function renderMyGlazeDetail(name){
   ensurePhotos();
 }
 function openGlazeAdd(){
-  const nm=prompt('추가할 유약 이름');
-  if(!nm)return;
-  const v=nm.trim();
-  if(!v)return;
-  if(GL.some(g=>g.name===v)||myGlaze(v)){alert('이미 목록에 있는 유약이에요.');return;}
-  store.myGlazes.push({name:v,photo:null,hex:null,memo:'',ts:Date.now()});save();
-  renderGlazeList();
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">내 유약 추가</span></div>
+    <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">기본 목록에 없는 유약을 등록해요. 이 기기에 저장돼요.</p>
+    <div class="formrow"><label>이름</label><input type="text" id="mgName" placeholder="예: 흑천목유" maxlength="20"></div>
+    <div class="formrow"><label>사진 (선택 — 단일 시유 시편이 좋아요)</label></div>
+    ${cropUI()}
+    <div class="formrow"><label>메모 (제조사·소성 온도 등)</label><textarea id="mgAddMemo"></textarea></div>
+    <div class="btnrow"><button class="btn" id="mgSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
+    <span id="mgState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+  wireCrop();
+  $('#mgSubmit').onclick=async()=>{
+    const v=$('#mgName').value.trim();
+    if(!v){alert('유약 이름을 입력해주세요.');return;}
+    if(GL.some(g=>g.name===v)||myGlaze(v)){alert('이미 목록에 있는 유약이에요.');return;}
+    $('#mgState').textContent='등록 중…';
+    const g={name:v,photo:null,hex:null,memo:$('#mgAddMemo').value.trim(),ts:Date.now()};
+    if(crop.img){
+      const cv=cropToCanvas();
+      g.hex=canvasHex(cv);
+      const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
+      const pid=newId();
+      await idb.put(pid,b64);photoCache[pid]=b64url(b64);
+      if(getToken())pushPhoto(pid,b64).catch(()=>{});
+      g.photo=pid;
+    }
+    store.myGlazes.push(g);save();
+    closeSheet();renderGlazeList();
+  };
 }
 function renderGlazeDetail(no){
   glazeDetail=no; const g=GMAP[no];
