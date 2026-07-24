@@ -547,7 +547,8 @@ function glazeChips(parts){
   return parts.map(p=>{
     const clickable=typeof p==='number';
     return `<button class="tag" ${clickable?`data-gl="${p}"`:''}>${glazeDot(p)}${glazeName(p)}</button>`;
-  }).join('')||'<span style="color:var(--sub);font-size:13px">기록된 유약이 없어요</span>';
+  }).join('<span style="align-self:center;color:var(--sub);font-weight:700">→</span>')
+  ||'<span style="color:var(--sub);font-size:13px">기록된 유약이 없어요</span>';
 }
 function openMineSheet(s,viewPid){
   const entry=findMine(s.id); if(!entry)return;
@@ -649,46 +650,57 @@ function openCropPick(onDone,onCancel){
   $('#cpCancel').onclick=onCancel;
 }
 /* ---------- add specimen ---------- */
-function glazeOptions(){
-  return '<option value="">선택</option>'
-    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
-    +'<option value="etc">기타 (직접 입력)</option>';
+let specDraft=null;
+function specDraftChips(){
+  const g=specDraft.glazes;
+  const nm=i=>g[i]==null?'—':glazeName(g[i]);
+  return `<span class="tag">${glazeDot(g[0])}밑: ${nm(0)}</span>
+    <span style="align-self:center;color:var(--sub);font-weight:700">→</span>
+    <span class="tag">${glazeDot(g[1])}윗: ${nm(1)}</span>`;
 }
 function openAddSheet(){
+  if(!specDraft)specDraft={b64:null,memo:'',glazes:[]};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
     <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">이 시편은 이 기기에 저장돼요.</p>
-    ${cropUI()}
-    <div class="formrow"><label>밑유약 (먼저 시유)</label>
-      <select id="addU">${glazeOptions()}</select>
-      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>윗유약 (나중 시유)</label>
-      <select id="addO">${glazeOptions()}</select>
-      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
+    ${specDraft.b64?`<img class="dimg" src="data:image/jpeg;base64,${specDraft.b64}" alt="">`:cropUI()}
+    <div class="formrow"><label>유약 (탭 순서 = 시유 순서, 2개)</label>
+      <div class="tagwrap" style="margin-bottom:6px">${specDraft.glazes.length?specDraftChips():''}</div>
+      <button class="btn" id="sGlz">유약 선택${specDraft.glazes.length?' 수정':''}</button></div>
+    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo">${specDraft.memo}</textarea></div>
     <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
     <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
-  wireCrop();
-  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
-  wire('#addU','#addUx');wire('#addO','#addOx');
+  if(!specDraft.b64)wireCrop();
+  const grab=()=>{specDraft.memo=$('#addMemo').value;
+    if(!specDraft.b64&&crop.img)specDraft.b64=cropToCanvas().toDataURL('image/jpeg',0.88).split(',')[1];};
+  $('#sGlz').onclick=()=>{grab();
+    openGlazeSelector(specDraft.glazes,sel=>{specDraft.glazes=sel;openAddSheet();},
+      ()=>openAddSheet(),
+      {max:2,title:'시편 유약 선택',hint:'첫 번째 탭 = 밑유약(먼저 시유), 두 번째 탭 = 윗유약이에요.'});};
   $('#addSubmit').onclick=submitAdd;
 }
 async function submitAdd(){
-  const uv=$('#addU').value, ov=$('#addO').value;
-  const uName=uv==='etc'?$('#addUx').value.trim():uv?GMAP[+uv].name:'';
-  const oName=ov==='etc'?$('#addOx').value.trim():ov?GMAP[+ov].name:'';
-  if(!crop.img){alert('사진을 선택해주세요.');return;}
-  if(!uName||!oName){alert('밑유약과 윗유약을 선택하거나 입력해주세요.');return;}
+  const grab=()=>{specDraft.memo=$('#addMemo').value;
+    if(!specDraft.b64&&crop.img)specDraft.b64=cropToCanvas().toDataURL('image/jpeg',0.88).split(',')[1];};
+  grab();
+  if(!specDraft.b64){alert('사진을 선택해주세요.');return;}
+  if(specDraft.glazes.length!==2){alert('밑유약과 윗유약, 순서대로 2개를 선택해주세요.');return;}
   const st=$('#addState');st.textContent='등록 중…';
   try{
-    const cv=cropToCanvas(), hex=canvasHex(cv);
-    const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
+    const [g1,g2]=specDraft.glazes;
+    const uNo=typeof g1==='number'?g1:null, oNo=typeof g2==='number'?g2:null;
+    const uName=glazeName(g1), oName=glazeName(g2);
+    const b64=specDraft.b64;
+    const im=new Image();
+    await new Promise(res=>{im.onload=res;im.src='data:image/jpeg;base64,'+b64;});
+    const cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;
+    cv.getContext('2d').drawImage(im,0,0);
+    const hex=canvasHex(cv);
     const id=newId(), pid=newId();
-    const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
     const disp=(uNo??uName)+'-'+(oNo??oName);
-    const memo=$('#addMemo').value.trim();
+    const memo=specDraft.memo.trim();
     await idb.put(pid,b64);
     photoCache[pid]=b64url(b64);
     if(getToken())pushPhoto(pid,b64).catch(()=>{});
@@ -698,12 +710,12 @@ async function submitAdd(){
       dup.photos.push(pid);dup.main=pid;
       dup.hex=hex;dup.grp=assignGrp(hex);
       if(memo)dup.memo=dup.memo?dup.memo+'\n'+memo:memo;
-      save();closeSheet();
+      save();specDraft=null;closeSheet();
       alert('이미 있는 '+disp+' 시편에 사진으로 추가했어요. 새 사진이 메인이 됐고, 메인은 상세에서 바꿀 수 있어요.');
     }else{
       store.mine.push({id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
         memo,ts:Date.now(),photos:[pid],main:pid});
-      save();closeSheet();
+      save();specDraft=null;closeSheet();
     }
   }catch(e){st.textContent='실패: '+e.message;}
 }
@@ -794,23 +806,32 @@ function openWorkAdd(){
     closeSheet();renderWorks();
   };
 }
-function openGlazeSelector(selected,onDone,onCancel){
+function openGlazeSelector(selected,onDone,onCancel,opts){
+  opts=opts||{};
   let sel=[...selected];
-  const has=p=>sel.some(x=>x===p);
+  const has=p=>sel.includes(p);
+  const num=p=>{const i=sel.indexOf(p);return i<0?'':`<b style="margin-right:4px">${i+1}.</b>`;};
+  function toggle(p){
+    if(has(p)){sel=sel.filter(x=>x!==p);}
+    else{
+      if(opts.max&&sel.length>=opts.max){alert(`최대 ${opts.max}개까지 선택할 수 있어요.`);return;}
+      sel=[...sel,p];
+    }
+    paint();
+  }
   function paint(){
     $('#pickN').textContent=sel.length;
     $('#pickList').innerHTML=GL.map(g=>
-      `<button class="tag ${has(g.no)?'on':''}" data-no="${g.no}">${glazeDot(g.no)}${g.name}</button>`).join('');
+      `<button class="tag ${has(g.no)?'on':''}" data-no="${g.no}">${num(g.no)}${glazeDot(g.no)}${g.name}</button>`).join('');
     $('#pickCustom').innerHTML=sel.filter(p=>typeof p==='string').map(nm=>
-      `<button class="tag on" data-cus="${nm.replace(/"/g,'&quot;')}">${glazeDot(nm)}${nm} ✕</button>`).join('');
-    $$('#pickList [data-no]').forEach(b=>b.onclick=()=>{
-      const n=+b.dataset.no; sel=has(n)?sel.filter(x=>x!==n):[...sel,n]; paint();});
-    $$('#pickCustom [data-cus]').forEach(b=>b.onclick=()=>{
-      sel=sel.filter(x=>x!==b.dataset.cus); paint();});
+      `<button class="tag on" data-cus="${nm.replace(/"/g,'&quot;')}">${num(nm)}${glazeDot(nm)}${nm} ✕</button>`).join('');
+    $$('#pickList [data-no]').forEach(b=>b.onclick=()=>toggle(+b.dataset.no));
+    $$('#pickCustom [data-cus]').forEach(b=>b.onclick=()=>toggle(b.dataset.cus));
   }
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">사용한 유약 선택</span><span class="dfam"><span id="pickN">${sel.length}</span>개</span></div>
-    <div class="tagwrap" id="pickList" style="margin-top:12px;max-height:42dvh;overflow-y:auto"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">${opts.title||'사용한 유약 선택'}</span><span class="dfam"><span id="pickN">${sel.length}</span>개</span></div>
+    <p style="font-size:12.5px;color:var(--sub);margin:6px 2px 0">${opts.hint||'탭한 순서가 시유 순서로 기록돼요.'}</p>
+    <div class="tagwrap" id="pickList" style="margin-top:12px;max-height:40dvh;overflow-y:auto"></div>
     <div class="thd">직접 입력한 유약</div>
     <div class="tagwrap" id="pickCustom"></div>
     <div class="tagadd"><input id="pickX" placeholder="목록에 없는 유약 이름"><button class="btn" id="pickXAdd">추가</button></div>
@@ -818,7 +839,9 @@ function openGlazeSelector(selected,onDone,onCancel){
     <button class="btn" id="pickCancel">취소</button></div>`;
   paint();
   $('#pickXAdd').onclick=()=>{const v=$('#pickX').value.trim();
-    if(v&&!has(v)){sel=[...sel,v];$('#pickX').value='';paint();}};
+    if(!v)return;
+    if(has(v)){$('#pickX').value='';return;}
+    toggle(v);$('#pickX').value='';};
   $('#pickOk').onclick=()=>onDone(sel);
   $('#pickCancel').onclick=onCancel;
 }
@@ -978,7 +1001,7 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
 
 const fab=document.createElement('button');fab.className='fab';fab.textContent='+';
 fab.setAttribute('aria-label','추가');
-fab.onclick=()=>{if(curTab==='work'){workDraft=null;openWorkAdd();}else openAddSheet();};
+fab.onclick=()=>{if(curTab==='work'){workDraft=null;openWorkAdd();}else{specDraft=null;openAddSheet();}};
 document.body.appendChild(fab);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 (function(){
