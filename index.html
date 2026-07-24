@@ -66,150 +66,10 @@ main{max-width:1080px;margin:0 auto;padding:4px 16px 80px}
 .card img{width:100%;aspect-ratio:116/132;object-fit:cover}
 .sticker{display:inline-block;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:3px;padding:1px 7px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.02em}
 .card .star{position:absolute;top:5px;right:6px;font-size:12px;color:#E0A422;text-shadow:0 0 3px #fff}
-.minebadge{position:absolute;top:5px;left:6px;font-size:10px;background:var(--accent);color:#fff;border-radius:3px;padding:1px 5px;font-weight:700}
-.fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:30;width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:26px;box-shadow:0 6px 18px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center}
-.cropbox{width:232px;height:264px;margin:10px auto;border-radius:10px;overflow:hidden;position:relative;background:#EEE;border:1px solid var(--line);touch-action:none}
-.cropbox img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none}
-.formrow{margin:12px 0}
-.formrow label{display:block;font-size:12.5px;font-weight:700;color:var(--sub);margin-bottom:5px}
-.formrow select,.formrow input[type=text],.formrow textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;background:var(--card)}
-.formrow textarea{height:64px;resize:vertical}
-.zoom{width:232px;display:block;margin:6px auto}
 .card .nomake{position:absolute;top:5px;left:6px;font-size:10px;background:rgba(255,255,255,.85);border-radius:3px;padding:1px 4px;color:var(--sub)}
 .empty{padding:56px 12px;text-align:center;color:var(--sub)}
 .empty b{color:var(--ink)}
 
-function openMineSheet(s){
-  const st=store.stars[s.code]||0;
-  const tagNames=Object.keys(store.tags).sort();
-  const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
-  const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
-    <img class="dimg" src="${photoCache[s.id]||''}" data-pid="${s.id}" alt="내 시편 ${s.disp}">
-    <div class="stars" role="group" aria-label="별점">
-      ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
-    </div>
-    <div class="recipe">${r1}${r2}</div>
-    ${s.memo?`<div class="thd">메모</div><p style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${s.memo.replace(/</g,'&lt;')}</p>`:''}
-    <div class="thd">태그</div>
-    <div class="tagwrap">${tagNames.map(t=>{
-      const on=(store.tags[t]||[]).includes(s.code);
-      return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
-    <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>
-    ${getToken()?'<div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="'+s.id+'">이 시편 삭제</button></div>':''}`;
-  $('#sheet').dataset.code=s.code;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-}
-
-/* ---------- add specimen ---------- */
-let crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-function glazeOptions(){
-  return '<option value="">선택</option>'
-    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
-    +'<option value="etc">기타 (직접 입력)</option>';
-}
-function openAddSheet(){
-  if(!getToken()){
-    alert('시편 등록은 내 기기 전용이라, 설정 탭에서 동기화 토큰을 먼저 연결해주세요.');
-    curTab='set';$$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab==='set'));renderTab();return;
-  }
-  crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
-    <div class="formrow"><label>사진</label>
-      <input type="file" id="addPhoto" accept="image/*" capture="environment"></div>
-    <div class="cropbox" id="cropbox"><img id="cropimg" alt="" hidden></div>
-    <input type="range" class="zoom" id="cropzoom" min="1" max="3.5" step="0.01" value="1" hidden>
-    <div class="formrow"><label>밑유약 (먼저 시유)</label>
-      <select id="addU">${glazeOptions()}</select>
-      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>윗유약 (나중 시유)</label>
-      <select id="addO">${glazeOptions()}</select>
-      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
-    <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
-    <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-  wireAddForm();
-}
-function wireAddForm(){
-  const box=$('#cropbox'), im=$('#cropimg'), zoom=$('#cropzoom');
-  function apply(){
-    const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
-    const minx=232-crop.iw*s, miny=264-crop.ih*s;
-    crop.tx=Math.min(0,Math.max(minx,crop.tx));
-    crop.ty=Math.min(0,Math.max(miny,crop.ty));
-    im.style.transform=`translate(${crop.tx}px,${crop.ty}px) scale(${s})`;
-  }
-  $('#addPhoto').onchange=e=>{
-    const f=e.target.files[0]; if(!f)return;
-    const url=URL.createObjectURL(f);
-    im.onload=()=>{crop.iw=im.naturalWidth;crop.ih=im.naturalHeight;
-      crop.z=1;const s0=Math.max(232/crop.iw,264/crop.ih);
-      crop.tx=(232-crop.iw*s0)/2;crop.ty=(264-crop.ih*s0)/2;
-      im.hidden=false;zoom.hidden=false;crop.img=im;apply();};
-    im.src=url;
-  };
-  zoom.oninput=()=>{crop.z=+zoom.value;apply();};
-  let drag=null;
-  box.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};box.setPointerCapture(e.pointerId);});
-  box.addEventListener('pointermove',e=>{if(!drag)return;
-    crop.tx+=e.clientX-drag.x;crop.ty+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};apply();});
-  box.addEventListener('pointerup',()=>drag=null);
-  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
-  wire('#addU','#addUx');wire('#addO','#addOx');
-  $('#addSubmit').onclick=submitAdd;
-}
-function cropToCanvas(){
-  const cv=document.createElement('canvas');cv.width=464;cv.height=528;
-  const ctx=cv.getContext('2d');
-  const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
-  ctx.scale(2,2);
-  ctx.translate(crop.tx,crop.ty);ctx.scale(s,s);
-  ctx.drawImage(crop.img,0,0);
-  return cv;
-}
-function canvasHex(cv){
-  const ctx=cv.getContext('2d');
-  const d=ctx.getImageData(cv.width*0.3,cv.height*0.28,cv.width*0.4,cv.height*0.34).data;
-  let r=0,g=0,b=0,n=d.length/4;
-  for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
-  const hx=v=>Math.round(v/n).toString(16).padStart(2,'0').toUpperCase();
-  return '#'+hx(r)+hx(g)+hx(b);
-}
-async function submitAdd(){
-  const uv=$('#addU').value, ov=$('#addO').value;
-  const uName=uv==='etc'?$('#addUx').value.trim():uv?GMAP[+uv].name:'';
-  const oName=ov==='etc'?$('#addOx').value.trim():ov?GMAP[+ov].name:'';
-  if(!crop.img){alert('사진을 선택해주세요.');return;}
-  if(!uName||!oName){alert('밑유약과 윗유약을 선택하거나 입력해주세요.');return;}
-  const st=$('#addState');st.textContent='등록 중…';
-  try{
-    const cv=cropToCanvas();
-    const hex=canvasHex(cv);
-    const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
-    const id=Date.now().toString(36);
-    const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
-    const disp=(uNo??uName)+'-'+(oNo??oName);
-    const entry={id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
-      memo:$('#addMemo').value.trim(),ts:Date.now()};
-    await idb.put(id,b64);
-    photoCache[id]=b64url(b64);
-    store.mine=store.mine||[];store.mine.push(entry);save();
-    pushPhoto(id,b64).catch(e=>alert('사진 동기화 실패(이 기기엔 저장됨): '+e.message));
-    closeSheet();
-  }catch(e){st.textContent='실패: '+e.message;}
-}
-async function deleteMine(id){
-  if(!confirm('이 시편을 삭제할까요?'))return;
-  store.mine=(store.mine||[]).filter(m=>m.id!==id);save();
-  removePhoto(id);
-  closeSheet();
-}
-
 /* ---------- glaze tab ---------- */
 .glist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .gcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;text-align:left}
@@ -293,13 +153,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
   <div class="ctrl">
     <select class="chip" id="glazeSel"></select>
     <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
-    <button class="chip" id="mineBtn" aria-pressed="false">내 시편</button>
-    <select class="chip" id="starSel">
-      <option value="0">별점 전체</option>
-      <option value="1">★ 이상</option>
-      <option value="2">★★ 이상</option>
-      <option value="3">★★★만</option>
-    </select>
+    <button class="chip" id="starBtn" aria-pressed="false">★ 즐겨찾기</button>
     <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
     <select class="chip" id="sortSel">
       <option value="hue">색 그룹순</option>
@@ -328,32 +182,13 @@ const SP=window.DATA.specimens, GL=window.DATA.glazes;
 const GMAP=Object.fromEntries(GL.map(g=>[g.no,g]));
 const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈','갈','흑갈','팥·분홍','황','황갈','올리브','녹','청록','하늘','파랑','남색','회','청흑','흑'];
 
-/* ---------- user specimens ---------- */
-function hexHL(hex){
-  const r=parseInt(hex.substr(1,2),16)/255,g=parseInt(hex.substr(3,2),16)/255,b=parseInt(hex.substr(5,2),16)/255;
-  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;let h=0,s=0;
-  if(mx!==mn){const dd=mx-mn;s=l>0.5?dd/(2-mx-mn):dd/(mx+mn);
-    h=mx===r?((g-b)/dd+(g<b?6:0)):mx===g?((b-r)/dd+2):((r-g)/dd+4);h*=60;}
-  return {h,s,l};
-}
-function assignGrp(hex){
-  const {h,s,l}=hexHL(hex), a=h*Math.PI/180;
-  const fx=s*Math.cos(a), fy=s*Math.sin(a), w=window.DATA.gw||0.35;
-  let bi=0,bd=1e9;
-  (window.DATA.groups||[]).forEach((g,i)=>{
-    if(!g.center)return;
-    const d=(fx-g.center[0])**2+(fy-g.center[1])**2+(w*(l-g.center[2]))**2;
-    if(d<bd){bd=d;bi=i;}
-  });
-  return bi;
-}
 /* ---------- persistent state ---------- */
 const LSKEY='glazedb:v1';
-let store={owned:{},stars:{},tags:{},mine:[]};
+let store={owned:{},stars:{},tags:{}};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
 const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
 const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
-const makeable=s=>s.u!=null&&s.o!=null&&ownedBrush(s.u)&&ownedBrush(s.o);
+const makeable=s=>ownedBrush(s.u)&&ownedBrush(s.o);
 
 
 /* ---------- gist sync ---------- */
@@ -395,103 +230,17 @@ async function pullStore(){
     const g=await gh('/gists/'+id);
     const remote=JSON.parse(g.files[FNAME].content);
     if((remote._ts||0)>(store._ts||0)){
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},remote);
+      store=Object.assign({owned:{},stars:{},tags:{}},remote);
       try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
       render();
     }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
     setSyncState('동기화됨 · '+new Date().toLocaleTimeString());
   }catch(e){setSyncState('동기화 실패: '+e.message);}
 }
-
-/* ---------- my specimens (private, gist-synced) ---------- */
-const PHOTO_MARK='glaze-db-photos.marker';
-let photoGistId=localStorage.getItem('glazedb:photogist')||'';
-const photoCache={};
-const idb={
-  open(){return new Promise((res,rej)=>{const r=indexedDB.open('glazedb',1);
-    r.onupgradeneeded=()=>r.result.createObjectStore('photos');
-    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});},
-  async get(id){const db=await this.open();return new Promise(res=>{
-    const t=db.transaction('photos').objectStore('photos').get(id);
-    t.onsuccess=()=>res(t.result||null);t.onerror=()=>res(null);});},
-  async put(id,b64){const db=await this.open();return new Promise(res=>{
-    const t=db.transaction('photos','readwrite');t.objectStore('photos').put(b64,id);
-    t.oncomplete=res;t.onerror=res;});},
-  async del(id){const db=await this.open();return new Promise(res=>{
-    const t=db.transaction('photos','readwrite');t.objectStore('photos').delete(id);
-    t.oncomplete=res;t.onerror=res;});}
-};
-function mineToSpec(m){
-  const {h,l}=hexHL(m.hex);
-  return {code:'u:'+m.id, id:m.id, disp:m.disp, u:m.uNo, o:m.oNo,
-    uName:m.uName, oName:m.oName, hex:m.hex,
-    grp:m.grp!=null?m.grp:assignGrp(m.hex), hue:h, l:l,
-    rev:null, mine:true, memo:m.memo||''};
-}
-function mergeMine(){
-  for(let i=SP.length-1;i>=0;i--)if(SP[i].mine)SP.splice(i,1);
-  (store.mine||[]).forEach(m=>SP.push(mineToSpec(m)));
-}
-async function findPhotoGist(create){
-  if(photoGistId){try{await gh('/gists/'+photoGistId);return photoGistId;}catch(e){photoGistId='';localStorage.removeItem('glazedb:photogist');}}
-  const list=await gh('/gists?per_page=100');
-  const hit=list.find(g=>g.files&&g.files[PHOTO_MARK]);
-  if(hit){photoGistId=hit.id;}
-  else if(create){
-    const made=await gh('/gists',{method:'POST',body:JSON.stringify({
-      description:'Glaze DB photos',public:false,
-      files:{[PHOTO_MARK]:{content:'glaze-db'}}})});
-    photoGistId=made.id;
-  }else return null;
-  localStorage.setItem('glazedb:photogist',photoGistId);
-  return photoGistId;
-}
-async function pushPhoto(id,b64){
-  const gid=await findPhotoGist(true);
-  await gh('/gists/'+gid,{method:'PATCH',body:JSON.stringify({
-    files:{['p-'+id+'.b64']:{content:b64}}})});
-}
-async function removePhoto(id){
-  try{const gid=await findPhotoGist(false);
-    if(gid)await gh('/gists/'+gid,{method:'PATCH',body:JSON.stringify({
-      files:{['p-'+id+'.b64']:null}})});}catch(e){}
-  idb.del(id);
-  if(photoCache[id]){URL.revokeObjectURL(photoCache[id]);delete photoCache[id];}
-}
-function b64url(b64){
-  const bin=atob(b64),arr=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-  return URL.createObjectURL(new Blob([arr],{type:'image/jpeg'}));
-}
-let photosFetching=false;
-async function ensurePhotos(){
-  const need=[];
-  for(const m of (store.mine||[])){
-    if(photoCache[m.id])continue;
-    const b=await idb.get(m.id);
-    if(b){photoCache[m.id]=b64url(b);continue;}
-    need.push(m.id);
-  }
-  if(need.length&&getToken()&&!photosFetching){
-    photosFetching=true;
-    try{const gid=await findPhotoGist(false);
-      if(gid){const g=await gh('/gists/'+gid);
-        for(const id of need){
-          const f=g.files['p-'+id+'.b64'];
-          if(f&&f.content){await idb.put(id,f.content);photoCache[id]=b64url(f.content);}
-        }}
-    }catch(e){}
-    photosFetching=false;
-  }
-  $$('img[data-pid]').forEach(im=>{
-    const u=photoCache[im.dataset.pid]; if(u&&im.src!==u)im.src=u;
-  });
-}
-
 if(getToken())pullStore();
 
 /* ---------- filter state ---------- */
-const F={grps:new Set(),glaze:'',make:false,mine:false,star:0,tag:'',sort:'hue'};
+const F={grps:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
 let curTab='spec', glazeDetail=null;
 
 /* ---------- group chips ---------- */
@@ -508,8 +257,7 @@ GRPS.forEach((g,gi)=>{
 $('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('');
 $('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
 $('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
-$('#mineBtn').onclick=()=>{F.mine=!F.mine;$('#mineBtn').setAttribute('aria-pressed',F.mine);render()};
-$('#starSel').onchange=e=>{F.star=+e.target.value;render()};
+$('#starBtn').onclick=()=>{F.star=!F.star;$('#starBtn').setAttribute('aria-pressed',F.star);render()};
 $('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
 $('#sortSel').onchange=e=>{F.sort=e.target.value;render()};
 function refreshTagSel(){
@@ -523,9 +271,8 @@ function filtered(){
   let xs=SP;
   if(F.grps.size)xs=xs.filter(s=>F.grps.has(s.grp));
   if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
-  if(F.make)xs=xs.filter(s=>s.mine?false:makeable(s));
-  if(F.mine)xs=xs.filter(s=>s.mine);
-  if(F.star)xs=xs.filter(s=>(store.stars[s.code]||0)>=F.star);
+  if(F.make)xs=xs.filter(makeable);
+  if(F.star)xs=xs.filter(s=>store.stars[s.code]);
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
   const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
     code:(a,b)=>a.u-b.u||a.o-b.o};
@@ -535,18 +282,13 @@ function filtered(){
 /* ---------- render: gallery ---------- */
 function cardHTML(s){
   const st=store.stars[s.code];
-  const img=s.mine?(photoCache[s.id]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
-  const pid=s.mine?` data-pid="${s.id}"`:'';
-  return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.disp||s.code}">
-    <img src="${img}"${pid} alt="" loading="lazy">
-    ${s.mine?'<span class="minebadge">내 시편</span>':''}
+  return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.code}">
+    <img src="crops/${s.file}" alt="" loading="lazy">
     ${st?`<span class="star">${'★'.repeat(st)}</span>`:''}
-    <span class="sticker">${s.disp||s.code}</span></button>`;
+    <span class="sticker">${s.code}</span></button>`;
 }
 function render(){
-  mergeMine();
   refreshTagSel();
-  ensurePhotos();
   if(curTab!=='spec')return renderTab();
   const xs=filtered();
   if(F.sort==='hue'&&GRPS.length){
@@ -577,13 +319,8 @@ function glazeRow(role,no){
     <span><span class="gname">${g.name}</span> <span class="gno">${no}</span></span>
     <span class="ownb ${ob?'y':''}">${ob?'붓 보유':'붓 미보유'}</span></div>`;
 }
-function glazeRowCustom(role,name){
-  return `<div class="rrow"><span class="ph"></span><span class="role">${role}</span>
-    <span><span class="gname">${name}</span> <span class="gno">직접 입력</span></span></div>`;
-}
 function openSheet(code){
   const s=SP.find(x=>x.code===code); if(!s)return;
-  if(s.mine)return openMineSheet(s);
   const mk=makeable(s), st=store.stars[code]||0;
   const tagNames=Object.keys(store.tags).sort();
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -625,703 +362,7 @@ $('#sheet').addEventListener('click',e=>{
       save();openSheet(code);}return;}
   const rv=e.target.closest('[data-open]');
   if(rv){openSheet(rv.dataset.open);return;}
-  if(e.target.id==='mineDel'){deleteMine(e.target.dataset.id);return;}
 });
-
-function openMineSheet(s){
-  const st=store.stars[s.code]||0;
-  const tagNames=Object.keys(store.tags).sort();
-  const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
-  const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
-    <img class="dimg" src="${photoCache[s.id]||''}" data-pid="${s.id}" alt="내 시편 ${s.disp}">
-    <div class="stars" role="group" aria-label="별점">
-      ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
-    </div>
-    <div class="recipe">${r1}${r2}</div>
-    ${s.memo?`<div class="thd">메모</div><p style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${s.memo.replace(/</g,'&lt;')}</p>`:''}
-    <div class="thd">태그</div>
-    <div class="tagwrap">${tagNames.map(t=>{
-      const on=(store.tags[t]||[]).includes(s.code);
-      return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
-    <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>
-    ${getToken()?'<div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="'+s.id+'">이 시편 삭제</button></div>':''}`;
-  $('#sheet').dataset.code=s.code;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-}
-
-/* ---------- add specimen ---------- */
-let crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-function glazeOptions(){
-  return '<option value="">선택</option>'
-    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
-    +'<option value="etc">기타 (직접 입력)</option>';
-}
-function openAddSheet(){
-  if(!getToken()){
-    alert('시편 등록은 내 기기 전용이라, 설정 탭에서 동기화 토큰을 먼저 연결해주세요.');
-    curTab='set';$$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab==='set'));renderTab();return;
-  }
-  crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
-    <div class="formrow"><label>사진</label>
-      <input type="file" id="addPhoto" accept="image/*" capture="environment"></div>
-    <div class="cropbox" id="cropbox"><img id="cropimg" alt="" hidden></div>
-    <input type="range" class="zoom" id="cropzoom" min="1" max="3.5" step="0.01" value="1" hidden>
-    <div class="formrow"><label>밑유약 (먼저 시유)</label>
-      <select id="addU">${glazeOptions()}</select>
-      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>윗유약 (나중 시유)</label>
-      <select id="addO">${glazeOptions()}</select>
-      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
-    <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
-    <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-  wireAddForm();
-}
-function wireAddForm(){
-  const box=$('#cropbox'), im=$('#cropimg'), zoom=$('#cropzoom');
-  function apply(){
-    const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
-    const minx=232-crop.iw*s, miny=264-crop.ih*s;
-    crop.tx=Math.min(0,Math.max(minx,crop.tx));
-    crop.ty=Math.min(0,Math.max(miny,crop.ty));
-    im.style.transform=`translate(${crop.tx}px,${crop.ty}px) scale(${s})`;
-  }
-  $('#addPhoto').onchange=e=>{
-    const f=e.target.files[0]; if(!f)return;
-    const url=URL.createObjectURL(f);
-    im.onload=()=>{crop.iw=im.naturalWidth;crop.ih=im.naturalHeight;
-      crop.z=1;const s0=Math.max(232/crop.iw,264/crop.ih);
-      crop.tx=(232-crop.iw*s0)/2;crop.ty=(264-crop.ih*s0)/2;
-      im.hidden=false;zoom.hidden=false;crop.img=im;apply();};
-    im.src=url;
-  };
-  zoom.oninput=()=>{crop.z=+zoom.value;apply();};
-  let drag=null;
-  box.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};box.setPointerCapture(e.pointerId);});
-  box.addEventListener('pointermove',e=>{if(!drag)return;
-    crop.tx+=e.clientX-drag.x;crop.ty+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};apply();});
-  box.addEventListener('pointerup',()=>drag=null);
-  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
-  wire('#addU','#addUx');wire('#addO','#addOx');
-  $('#addSubmit').onclick=submitAdd;
-}
-function cropToCanvas(){
-  const cv=document.createElement('canvas');cv.width=464;cv.height=528;
-  const ctx=cv.getContext('2d');
-  const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
-  ctx.scale(2,2);
-  ctx.translate(crop.tx,crop.ty);ctx.scale(s,s);
-  ctx.drawImage(crop.img,0,0);
-  return cv;
-}
-function canvasHex(cv){
-  const ctx=cv.getContext('2d');
-  const d=ctx.getImageData(cv.width*0.3,cv.height*0.28,cv.width*0.4,cv.height*0.34).data;
-  let r=0,g=0,b=0,n=d.length/4;
-  for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
-  const hx=v=>Math.round(v/n).toString(16).padStart(2,'0').toUpperCase();
-  return '#'+hx(r)+hx(g)+hx(b);
-}
-async function submitAdd(){
-  const uv=$('#addU').value, ov=$('#addO').value;
-  const uName=uv==='etc'?$('#addUx').value.trim():uv?GMAP[+uv].name:'';
-  const oName=ov==='etc'?$('#addOx').value.trim():ov?GMAP[+ov].name:'';
-  if(!crop.img){alert('사진을 선택해주세요.');return;}
-  if(!uName||!oName){alert('밑유약과 윗유약을 선택하거나 입력해주세요.');return;}
-  const st=$('#addState');st.textContent='등록 중…';
-  try{
-    const cv=cropToCanvas();
-    const hex=canvasHex(cv);
-    const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
-    const id=Date.now().toString(36);
-    const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
-    const disp=(uNo??uName)+'-'+(oNo??oName);
-    const entry={id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
-      memo:$('#addMemo').value.trim(),ts:Date.now()};
-    await idb.put(id,b64);
-    photoCache[id]=b64url(b64);
-    store.mine=store.mine||[];store.mine.push(entry);save();
-    pushPhoto(id,b64).catch(e=>alert('사진 동기화 실패(이 기기엔 저장됨): '+e.message));
-    closeSheet();
-  }catch(e){st.textContent='실패: '+e.message;}
-}
-async function deleteMine(id){
-  if(!confirm('이 시편을 삭제할까요?'))return;
-  store.mine=(store.mine||[]).filter(m=>m.id!==id);save();
-  removePhoto(id);
-  closeSheet();
-}
-
-/* ---------- glaze tab ---------- */
-.glist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.gcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;text-align:left}
-.gcard img,.gcard .ph{width:52px;height:52px;border-radius:8px;object-fit:cover;flex:none}
-.gcard .ph{background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:11px}
-.gcard .no{font-family:var(--mono);font-size:11px;color:var(--sub)}
-.gcard .nm{font-weight:700;font-size:14px}
-.gcard .own{font-size:11px;color:var(--sub);margin-top:2px}
-.gcard .own .y{color:var(--accent);font-weight:700}
-.backbar{display:flex;align-items:center;gap:10px;margin:6px 0 14px}
-.backbar button{font-weight:700;color:var(--accent)}
-.gsec{margin:18px 0 8px;font-size:13px;font-weight:700;color:var(--sub)}
-.gsec b{color:var(--ink);font-size:15px}
-
-/* ---------- settings ---------- */
-.settings{max-width:640px}
-.settings p.help{color:var(--sub);font-size:13.5px}
-table.own{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-table.own th,table.own td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
-table.own th{font-size:12px;color:var(--sub);font-weight:600;background:#FAF9F6}
-table.own td.c{text-align:center}
-table.own input{width:18px;height:18px;accent-color:var(--accent)}
-table.own .no{font-family:var(--mono);font-size:12px;color:var(--sub)}
-.iohd{margin:26px 0 6px;font-weight:700}
-textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:var(--mono);font-size:11px;background:var(--card)}
-.btnrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 14px;font-weight:600;font-size:13.5px}
-.btn.warn{color:#A6402F}
-
-/* ---------- detail sheet ---------- */
-.scrim{position:fixed;inset:0;background:rgba(30,28,24,.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .18s}
-.scrim.open{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(102%);transition:transform .22s cubic-bezier(.3,.9,.4,1),visibility .22s;max-height:88dvh;overflow-y:auto;padding:14px 18px calc(20px + env(safe-area-inset-bottom));visibility:hidden;pointer-events:none}
-.sheet.open{visibility:visible;pointer-events:auto}
-.sheet.open{transform:translateY(0)}
-@media(min-width:720px){.sheet{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-46%) scale(.97);opacity:0;width:420px;border-radius:16px;max-height:86vh}
-.sheet.open{transform:translate(-50%,-50%) scale(1);opacity:1}}
-.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 12px}
-@media(min-width:720px){.grab{display:none}}
-.dhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.dcode{font-family:var(--mono);font-size:22px;font-weight:600}
-.dfam{font-size:12px;color:var(--sub)}
-.dimg{width:min(240px,70%);margin:14px auto;border-radius:10px;border:1px solid var(--line)}
-.stars{display:flex;gap:4px;justify-content:center;margin:2px 0 14px}
-.stars button{font-size:24px;color:#D8D4CB;padding:2px 4px}
-.stars button.on{color:#E0A422}
-.recipe{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.rrow{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--card)}
-.rrow + .rrow{border-top:1px dashed var(--line)}
-.rrow img,.rrow .ph{width:44px;height:44px;border-radius:8px;object-fit:cover;flex:none}
-.rrow .ph{background:var(--line)}
-.rrow .role{font-size:11px;color:var(--sub);width:56px;flex:none}
-.rrow .gname{font-weight:700}
-.rrow .gno{font-family:var(--mono);font-size:11.5px;color:var(--sub)}
-.rrow .ownb{margin-left:auto;font-size:11px;color:var(--sub)}
-.rrow .ownb.y{color:var(--accent);font-weight:700}
-.makeline{margin:10px 2px 0;font-size:13px;color:var(--sub)}
-.makeline.y{color:var(--accent);font-weight:600}
-.revchip{display:inline-flex;align-items:center;gap:6px;margin-top:14px;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;background:var(--bg)}
-.revchip .rc{font-family:var(--mono)}
-.thd{margin:20px 0 8px;font-size:13px;font-weight:700;color:var(--sub)}
-.tagwrap{display:flex;gap:6px;flex-wrap:wrap}
-.tag{border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--card)}
-.tag.on{background:var(--ink);border-color:var(--ink);color:#fff}
-.tagadd{display:flex;gap:6px;margin-top:8px}
-.tagadd input{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:var(--card)}
-</style>
-</head>
-<body>
-<header>
-  <div class="brand"><h1>유약 시편</h1><span class="count" id="totalCount"></span></div>
-  <nav class="tabs" role="tablist">
-    <button role="tab" aria-selected="true" data-tab="spec">시편</button>
-    <button role="tab" aria-selected="false" data-tab="glaze">유약</button>
-    <button role="tab" aria-selected="false" data-tab="set">설정</button>
-  </nav>
-</header>
-
-<div class="toolbar" id="toolbar">
-  <div class="famrow" id="famRow"></div>
-  <div class="ctrl">
-    <select class="chip" id="glazeSel"></select>
-    <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
-    <button class="chip" id="mineBtn" aria-pressed="false">내 시편</button>
-    <select class="chip" id="starSel">
-      <option value="0">별점 전체</option>
-      <option value="1">★ 이상</option>
-      <option value="2">★★ 이상</option>
-      <option value="3">★★★만</option>
-    </select>
-    <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
-    <select class="chip" id="sortSel">
-      <option value="hue">색 그룹순</option>
-      <option value="light">밝은순</option>
-      <option value="dark">어두운순</option>
-      <option value="code">코드순</option>
-    </select>
-  </div>
-  <div class="result" id="resultLine"></div>
-</div>
-
-<main>
-  <section id="specView"><div id="grid"></div><div class="empty" id="emptyMsg" hidden></div></section>
-  <section id="glazeView" hidden></section>
-  <section id="setView" class="settings" hidden></section>
-</main>
-
-<div class="scrim" id="scrim"></div>
-<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
-
-<script src="data.js?v=11"></script>
-<script>
-try{
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const SP=window.DATA.specimens, GL=window.DATA.glazes;
-const GMAP=Object.fromEntries(GL.map(g=>[g.no,g]));
-const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈','갈','흑갈','팥·분홍','황','황갈','올리브','녹','청록','하늘','파랑','남색','회','청흑','흑'];
-
-/* ---------- user specimens ---------- */
-function hexHL(hex){
-  const r=parseInt(hex.substr(1,2),16)/255,g=parseInt(hex.substr(3,2),16)/255,b=parseInt(hex.substr(5,2),16)/255;
-  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;let h=0,s=0;
-  if(mx!==mn){const dd=mx-mn;s=l>0.5?dd/(2-mx-mn):dd/(mx+mn);
-    h=mx===r?((g-b)/dd+(g<b?6:0)):mx===g?((b-r)/dd+2):((r-g)/dd+4);h*=60;}
-  return {h,s,l};
-}
-function assignGrp(hex){
-  const {h,s,l}=hexHL(hex), a=h*Math.PI/180;
-  const fx=s*Math.cos(a), fy=s*Math.sin(a), w=window.DATA.gw||0.35;
-  let bi=0,bd=1e9;
-  (window.DATA.groups||[]).forEach((g,i)=>{
-    if(!g.center)return;
-    const d=(fx-g.center[0])**2+(fy-g.center[1])**2+(w*(l-g.center[2]))**2;
-    if(d<bd){bd=d;bi=i;}
-  });
-  return bi;
-}
-/* ---------- persistent state ---------- */
-const LSKEY='glazedb:v1';
-let store={owned:{},stars:{},tags:{},mine:[]};
-try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
-const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
-const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
-const makeable=s=>s.u!=null&&s.o!=null&&ownedBrush(s.u)&&ownedBrush(s.o);
-
-
-/* ---------- gist sync ---------- */
-const TKEY='glazedb:gisttoken', GKEY='glazedb:gistid', FNAME='glaze-db-sync.json';
-const getToken=()=>localStorage.getItem(TKEY)||'';
-let syncTimer=null, syncState='';
-function setSyncState(msg){syncState=msg;const el=document.querySelector('#syncState');if(el)el.textContent=msg;}
-async function gh(path,opt={}){
-  const r=await fetch('https://api.github.com'+path,Object.assign({headers:{
-    'Authorization':'token '+getToken(),'Accept':'application/vnd.github+json'}},opt));
-  if(!r.ok)throw new Error('GitHub '+r.status);
-  return r.status===204?null:r.json();
-}
-async function findGist(){
-  let id=localStorage.getItem(GKEY);
-  if(id){try{await gh('/gists/'+id);return id;}catch(e){localStorage.removeItem(GKEY);}}
-  const list=await gh('/gists?per_page=100');
-  const hit=list.find(g=>g.files&&g.files[FNAME]);
-  if(hit){localStorage.setItem(GKEY,hit.id);return hit.id;}
-  const made=await gh('/gists',{method:'POST',body:JSON.stringify({
-    description:'Glaze DB sync',public:false,
-    files:{[FNAME]:{content:JSON.stringify(store)}}})});
-  localStorage.setItem(GKEY,made.id);return made.id;
-}
-async function pushStore(){
-  if(!getToken())return;
-  try{setSyncState('저장 중…');
-    const id=await findGist();
-    await gh('/gists/'+id,{method:'PATCH',body:JSON.stringify({
-      files:{[FNAME]:{content:JSON.stringify(store)}}})});
-    setSyncState('동기화됨 · '+new Date().toLocaleTimeString());
-  }catch(e){setSyncState('동기화 실패: '+e.message);}
-}
-function queueSync(){if(!getToken())return;clearTimeout(syncTimer);syncTimer=setTimeout(pushStore,2000);}
-async function pullStore(){
-  if(!getToken())return;
-  try{setSyncState('불러오는 중…');
-    const id=await findGist();
-    const g=await gh('/gists/'+id);
-    const remote=JSON.parse(g.files[FNAME].content);
-    if((remote._ts||0)>(store._ts||0)){
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},remote);
-      try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
-      render();
-    }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
-    setSyncState('동기화됨 · '+new Date().toLocaleTimeString());
-  }catch(e){setSyncState('동기화 실패: '+e.message);}
-}
-
-/* ---------- my specimens (private, gist-synced) ---------- */
-const PHOTO_MARK='glaze-db-photos.marker';
-let photoGistId=localStorage.getItem('glazedb:photogist')||'';
-const photoCache={};
-const idb={
-  open(){return new Promise((res,rej)=>{const r=indexedDB.open('glazedb',1);
-    r.onupgradeneeded=()=>r.result.createObjectStore('photos');
-    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});},
-  async get(id){const db=await this.open();return new Promise(res=>{
-    const t=db.transaction('photos').objectStore('photos').get(id);
-    t.onsuccess=()=>res(t.result||null);t.onerror=()=>res(null);});},
-  async put(id,b64){const db=await this.open();return new Promise(res=>{
-    const t=db.transaction('photos','readwrite');t.objectStore('photos').put(b64,id);
-    t.oncomplete=res;t.onerror=res;});},
-  async del(id){const db=await this.open();return new Promise(res=>{
-    const t=db.transaction('photos','readwrite');t.objectStore('photos').delete(id);
-    t.oncomplete=res;t.onerror=res;});}
-};
-function mineToSpec(m){
-  const {h,l}=hexHL(m.hex);
-  return {code:'u:'+m.id, id:m.id, disp:m.disp, u:m.uNo, o:m.oNo,
-    uName:m.uName, oName:m.oName, hex:m.hex,
-    grp:m.grp!=null?m.grp:assignGrp(m.hex), hue:h, l:l,
-    rev:null, mine:true, memo:m.memo||''};
-}
-function mergeMine(){
-  for(let i=SP.length-1;i>=0;i--)if(SP[i].mine)SP.splice(i,1);
-  (store.mine||[]).forEach(m=>SP.push(mineToSpec(m)));
-}
-async function findPhotoGist(create){
-  if(photoGistId){try{await gh('/gists/'+photoGistId);return photoGistId;}catch(e){photoGistId='';localStorage.removeItem('glazedb:photogist');}}
-  const list=await gh('/gists?per_page=100');
-  const hit=list.find(g=>g.files&&g.files[PHOTO_MARK]);
-  if(hit){photoGistId=hit.id;}
-  else if(create){
-    const made=await gh('/gists',{method:'POST',body:JSON.stringify({
-      description:'Glaze DB photos',public:false,
-      files:{[PHOTO_MARK]:{content:'glaze-db'}}})});
-    photoGistId=made.id;
-  }else return null;
-  localStorage.setItem('glazedb:photogist',photoGistId);
-  return photoGistId;
-}
-async function pushPhoto(id,b64){
-  const gid=await findPhotoGist(true);
-  await gh('/gists/'+gid,{method:'PATCH',body:JSON.stringify({
-    files:{['p-'+id+'.b64']:{content:b64}}})});
-}
-async function removePhoto(id){
-  try{const gid=await findPhotoGist(false);
-    if(gid)await gh('/gists/'+gid,{method:'PATCH',body:JSON.stringify({
-      files:{['p-'+id+'.b64']:null}})});}catch(e){}
-  idb.del(id);
-  if(photoCache[id]){URL.revokeObjectURL(photoCache[id]);delete photoCache[id];}
-}
-function b64url(b64){
-  const bin=atob(b64),arr=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-  return URL.createObjectURL(new Blob([arr],{type:'image/jpeg'}));
-}
-let photosFetching=false;
-async function ensurePhotos(){
-  const need=[];
-  for(const m of (store.mine||[])){
-    if(photoCache[m.id])continue;
-    const b=await idb.get(m.id);
-    if(b){photoCache[m.id]=b64url(b);continue;}
-    need.push(m.id);
-  }
-  if(need.length&&getToken()&&!photosFetching){
-    photosFetching=true;
-    try{const gid=await findPhotoGist(false);
-      if(gid){const g=await gh('/gists/'+gid);
-        for(const id of need){
-          const f=g.files['p-'+id+'.b64'];
-          if(f&&f.content){await idb.put(id,f.content);photoCache[id]=b64url(f.content);}
-        }}
-    }catch(e){}
-    photosFetching=false;
-  }
-  $$('img[data-pid]').forEach(im=>{
-    const u=photoCache[im.dataset.pid]; if(u&&im.src!==u)im.src=u;
-  });
-}
-
-if(getToken())pullStore();
-
-/* ---------- filter state ---------- */
-const F={grps:new Set(),glaze:'',make:false,mine:false,star:0,tag:'',sort:'hue'};
-let curTab='spec', glazeDetail=null;
-
-/* ---------- group chips ---------- */
-const GRPS=(window.DATA&&window.DATA.groups)||[];
-GRPS.forEach((g,gi)=>{
-  const b=document.createElement('button'); b.className='fam'; b.setAttribute('aria-pressed','false');
-  b.innerHTML=`<span class="dot" style="background:${g.hex}"></span><span>${g.name}</span>`;
-  b.onclick=()=>{F.grps.has(gi)?F.grps.delete(gi):F.grps.add(gi);
-    b.setAttribute('aria-pressed',F.grps.has(gi)); render();};
-  $('#famRow').appendChild(b);
-});
-
-/* ---------- controls ---------- */
-$('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('');
-$('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
-$('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
-$('#mineBtn').onclick=()=>{F.mine=!F.mine;$('#mineBtn').setAttribute('aria-pressed',F.mine);render()};
-$('#starSel').onchange=e=>{F.star=+e.target.value;render()};
-$('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
-$('#sortSel').onchange=e=>{F.sort=e.target.value;render()};
-function refreshTagSel(){
-  const names=Object.keys(store.tags).sort();
-  $('#tagSel').innerHTML='<option value="">태그 전체</option>'+names.map(t=>`<option ${F.tag===t?'selected':''}>${t}</option>`).join('');
-  if(F.tag&&!names.includes(F.tag))F.tag='';
-}
-
-/* ---------- filtering ---------- */
-function filtered(){
-  let xs=SP;
-  if(F.grps.size)xs=xs.filter(s=>F.grps.has(s.grp));
-  if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
-  if(F.make)xs=xs.filter(s=>s.mine?false:makeable(s));
-  if(F.mine)xs=xs.filter(s=>s.mine);
-  if(F.star)xs=xs.filter(s=>(store.stars[s.code]||0)>=F.star);
-  if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
-  const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
-    code:(a,b)=>a.u-b.u||a.o-b.o};
-  return [...xs].sort(by[F.sort]);
-}
-
-/* ---------- render: gallery ---------- */
-function cardHTML(s){
-  const st=store.stars[s.code];
-  const img=s.mine?(photoCache[s.id]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
-  const pid=s.mine?` data-pid="${s.id}"`:'';
-  return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.disp||s.code}">
-    <img src="${img}"${pid} alt="" loading="lazy">
-    ${s.mine?'<span class="minebadge">내 시편</span>':''}
-    ${st?`<span class="star">${'★'.repeat(st)}</span>`:''}
-    <span class="sticker">${s.disp||s.code}</span></button>`;
-}
-function render(){
-  mergeMine();
-  refreshTagSel();
-  ensurePhotos();
-  if(curTab!=='spec')return renderTab();
-  const xs=filtered();
-  if(F.sort==='hue'&&GRPS.length){
-    let html='';
-    GRPS.forEach((g,gi)=>{
-      const ys=xs.filter(s=>s.grp===gi);
-      if(!ys.length)return;
-      html+=`<div class="ghead"><span class="gdot" style="background:${g.hex}"></span>${g.name} <b>${ys.length}</b></div>`
-           +`<div class="grid">${ys.map(cardHTML).join('')}</div>`;
-    });
-    $('#grid').innerHTML=html;
-  }else{
-    $('#grid').innerHTML=`<div class="grid">${xs.map(cardHTML).join('')}</div>`;
-  }
-  $('#emptyMsg').hidden=xs.length>0;
-  $('#emptyMsg').innerHTML='조건에 맞는 시편이 없어요.<br>필터를 하나 풀어보세요.';
-  $('#resultLine').innerHTML=`<b>${xs.length}</b> / ${SP.length}개`;
-}
-$('#grid').addEventListener('click',e=>{
-  const c=e.target.closest('.card'); if(c)openSheet(c.dataset.code);
-});
-
-/* ---------- detail sheet ---------- */
-function glazeRow(role,no){
-  const g=GMAP[no], ob=ownedBrush(no);
-  const img=g.file?`<img src="singles/${g.file}" alt="">`:'<span class="ph"></span>';
-  return `<div class="rrow">${img}<span class="role">${role}</span>
-    <span><span class="gname">${g.name}</span> <span class="gno">${no}</span></span>
-    <span class="ownb ${ob?'y':''}">${ob?'붓 보유':'붓 미보유'}</span></div>`;
-}
-function glazeRowCustom(role,name){
-  return `<div class="rrow"><span class="ph"></span><span class="role">${role}</span>
-    <span><span class="gname">${name}</span> <span class="gno">직접 입력</span></span></div>`;
-}
-function openSheet(code){
-  const s=SP.find(x=>x.code===code); if(!s)return;
-  if(s.mine)return openMineSheet(s);
-  const mk=makeable(s), st=store.stars[code]||0;
-  const tagNames=Object.keys(store.tags).sort();
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode">${s.code}</span><span class="dfam">${(GRPS[s.grp]||{}).name||s.fam} · ${s.hex}</span></div>
-    <img class="dimg" src="crops/${s.file}" alt="시편 ${s.code}">
-    <div class="stars" role="group" aria-label="별점">
-      ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
-    </div>
-    <div class="recipe">${glazeRow('먼저 2회',s.u)}${glazeRow('위에 2회',s.o)}</div>
-    <div class="makeline ${mk?'y':''}">${mk?'지금 공방 재고로 만들 수 있어요':'붓시유용 유약이 부족해요 — 설정에서 보유를 확인하세요'}</div>
-    ${s.rev?`<button class="revchip" data-open="${s.rev}">순서 뒤집기 → <span class="rc">${s.rev}</span></button>`:''}
-    <div class="thd">태그</div>
-    <div class="tagwrap">${tagNames.map(t=>{
-      const on=(store.tags[t]||[]).includes(code);
-      return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
-    <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>`;
-  $('#sheet').dataset.code=code;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-}
-function closeSheet(){$('#scrim').classList.remove('open');$('#sheet').classList.remove('open');
-  document.body.style.overflow='';render();}
-$('#scrim').onclick=closeSheet;
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
-$('#sheet').addEventListener('click',e=>{
-  const code=$('#sheet').dataset.code;
-  const st=e.target.closest('[data-star]');
-  if(st){const n=+st.dataset.star;
-    store.stars[code]=(store.stars[code]===n)?0:n;
-    if(!store.stars[code])delete store.stars[code];
-    save();openSheet(code);return;}
-  const tg=e.target.closest('.tag');
-  if(tg){const t=tg.dataset.tag, arr=store.tags[t]||[];
-    store.tags[t]=arr.includes(code)?arr.filter(c=>c!==code):[...arr,code];
-    save();openSheet(code);return;}
-  if(e.target.id==='addTag'){const v=$('#newTag').value.trim();
-    if(v){store.tags[v]=store.tags[v]||[];
-      if(!store.tags[v].includes(code))store.tags[v].push(code);
-      save();openSheet(code);}return;}
-  const rv=e.target.closest('[data-open]');
-  if(rv){openSheet(rv.dataset.open);return;}
-  if(e.target.id==='mineDel'){deleteMine(e.target.dataset.id);return;}
-});
-
-function openMineSheet(s){
-  const st=store.stars[s.code]||0;
-  const tagNames=Object.keys(store.tags).sort();
-  const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
-  const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
-    <img class="dimg" src="${photoCache[s.id]||''}" data-pid="${s.id}" alt="내 시편 ${s.disp}">
-    <div class="stars" role="group" aria-label="별점">
-      ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
-    </div>
-    <div class="recipe">${r1}${r2}</div>
-    ${s.memo?`<div class="thd">메모</div><p style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${s.memo.replace(/</g,'&lt;')}</p>`:''}
-    <div class="thd">태그</div>
-    <div class="tagwrap">${tagNames.map(t=>{
-      const on=(store.tags[t]||[]).includes(s.code);
-      return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
-    <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>
-    ${getToken()?'<div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="'+s.id+'">이 시편 삭제</button></div>':''}`;
-  $('#sheet').dataset.code=s.code;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-}
-
-/* ---------- add specimen ---------- */
-const RKEY='glazedb:repotoken';
-const repoToken=()=>localStorage.getItem(RKEY)||'';
-const REPO='sookjinroe/Glaze-DB';
-async function ghRepo(path,opt={}){
-  const r=await fetch('https://api.github.com/repos/'+REPO+path,Object.assign({headers:{
-    'Authorization':'token '+repoToken(),'Accept':'application/vnd.github+json'}},opt));
-  if(!r.ok&&r.status!==404)throw new Error('GitHub '+r.status);
-  return r.status===404?null:r.json();
-}
-async function putRepoFile(path,b64,msg){
-  const cur=await ghRepo('/contents/'+path);
-  const body={message:msg,content:b64};
-  if(cur&&cur.sha)body.sha=cur.sha;
-  return ghRepo('/contents/'+path,{method:'PUT',body:JSON.stringify(body)});
-}
-let crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-function glazeOptions(){
-  return '<option value="">선택</option>'
-    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
-    +'<option value="etc">기타 (직접 입력)</option>';
-}
-function openAddSheet(){
-  if(!getToken()){
-    alert('시편 등록은 내 기기 전용이라, 설정 탭에서 동기화 토큰을 먼저 연결해주세요.');
-    curTab='set';$$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab==='set'));renderTab();return;
-  }
-  crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
-    <div class="formrow"><label>사진</label>
-      <input type="file" id="addPhoto" accept="image/*" capture="environment"></div>
-    <div class="cropbox" id="cropbox"><img id="cropimg" alt="" hidden></div>
-    <input type="range" class="zoom" id="cropzoom" min="1" max="3.5" step="0.01" value="1" hidden>
-    <div class="formrow"><label>밑유약 (먼저 시유)</label>
-      <select id="addU">${glazeOptions()}</select>
-      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>윗유약 (나중 시유)</label>
-      <select id="addO">${glazeOptions()}</select>
-      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
-    <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
-    <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-  wireAddForm();
-}
-function wireAddForm(){
-  const box=$('#cropbox'), im=$('#cropimg'), zoom=$('#cropzoom');
-  function apply(){
-    const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
-    const minx=232-crop.iw*s, miny=264-crop.ih*s;
-    crop.tx=Math.min(0,Math.max(minx,crop.tx));
-    crop.ty=Math.min(0,Math.max(miny,crop.ty));
-    im.style.transform=`translate(${crop.tx}px,${crop.ty}px) scale(${s})`;
-  }
-  $('#addPhoto').onchange=e=>{
-    const f=e.target.files[0]; if(!f)return;
-    const url=URL.createObjectURL(f);
-    im.onload=()=>{crop.iw=im.naturalWidth;crop.ih=im.naturalHeight;
-      crop.z=1;const s0=Math.max(232/crop.iw,264/crop.ih);
-      crop.tx=(232-crop.iw*s0)/2;crop.ty=(264-crop.ih*s0)/2;
-      im.hidden=false;zoom.hidden=false;crop.img=im;apply();};
-    im.src=url;
-  };
-  zoom.oninput=()=>{crop.z=+zoom.value;apply();};
-  let drag=null;
-  box.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};box.setPointerCapture(e.pointerId);});
-  box.addEventListener('pointermove',e=>{if(!drag)return;
-    crop.tx+=e.clientX-drag.x;crop.ty+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};apply();});
-  box.addEventListener('pointerup',()=>drag=null);
-  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
-  wire('#addU','#addUx');wire('#addO','#addOx');
-  $('#addSubmit').onclick=submitAdd;
-}
-function cropToCanvas(){
-  const cv=document.createElement('canvas');cv.width=464;cv.height=528;
-  const ctx=cv.getContext('2d');
-  const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
-  ctx.scale(2,2);
-  ctx.translate(crop.tx,crop.ty);ctx.scale(s,s);
-  ctx.drawImage(crop.img,0,0);
-  return cv;
-}
-function canvasHex(cv){
-  const ctx=cv.getContext('2d');
-  const d=ctx.getImageData(cv.width*0.3,cv.height*0.28,cv.width*0.4,cv.height*0.34).data;
-  let r=0,g=0,b=0,n=d.length/4;
-  for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
-  const hx=v=>Math.round(v/n).toString(16).padStart(2,'0').toUpperCase();
-  return '#'+hx(r)+hx(g)+hx(b);
-}
-async function submitAdd(){
-  const uv=$('#addU').value, ov=$('#addO').value;
-  const uName=uv==='etc'?$('#addUx').value.trim():uv?GMAP[+uv].name:'';
-  const oName=ov==='etc'?$('#addOx').value.trim():ov?GMAP[+ov].name:'';
-  if(!crop.img){alert('사진을 선택해주세요.');return;}
-  if(!uName||!oName){alert('밑유약과 윗유약을 선택하거나 입력해주세요.');return;}
-  const st=$('#addState');st.textContent='등록 중…';
-  try{
-    const cv=cropToCanvas();
-    const hex=canvasHex(cv);
-    const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
-    const id=Date.now().toString(36);
-    const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
-    const disp=(uNo??uName)+'-'+(oNo??oName);
-    const entry={id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
-      memo:$('#addMemo').value.trim(),ts:Date.now()};
-    await idb.put(id,b64);
-    photoCache[id]=b64url(b64);
-    store.mine=store.mine||[];store.mine.push(entry);save();
-    pushPhoto(id,b64).catch(e=>alert('사진 동기화 실패(이 기기엔 저장됨): '+e.message));
-    closeSheet();
-  }catch(e){st.textContent='실패: '+e.message;}
-}
-async function deleteMine(id){
-  if(!confirm('이 시편을 삭제할까요?'))return;
-  store.mine=(store.mine||[]).filter(m=>m.id!==id);save();
-  removePhoto(id);
-  closeSheet();
-}
 
 /* ---------- glaze tab ---------- */
 function ownText(no){const o=store.owned[no]||{};
@@ -1393,10 +434,10 @@ $('#setView').addEventListener('click',e=>{
     localStorage.removeItem(TKEY);localStorage.removeItem(GKEY);renderSettings();return;}
   if(e.target.id==='ioImport'){try{
       const v=JSON.parse($('#ioBox').value);
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},v);save();renderSettings();alert('가져왔어요.');
+      store=Object.assign({owned:{},stars:{},tags:{}},v);save();renderSettings();alert('가져왔어요.');
     }catch(err){alert('형식이 올바르지 않아요. 내보내기 내용을 그대로 붙여넣어 주세요.');}}
   if(e.target.id==='ioReset'&&confirm('보유·별점·태그를 모두 지울까요?')){
-    store={owned:{},stars:{},tags:{},mine:[]};save();renderSettings();}
+    store={owned:{},stars:{},tags:{}};save();renderSettings();}
 });
 
 /* ---------- tabs ---------- */
@@ -1415,8 +456,6 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
   renderTab();
 });
 
-const fab=document.createElement('button');fab.className='fab';fab.textContent='+';
-fab.setAttribute('aria-label','시편 추가');fab.onclick=openAddSheet;document.body.appendChild(fab);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 (function(){
   const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
