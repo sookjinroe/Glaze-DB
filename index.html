@@ -209,7 +209,7 @@ const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈',
 
 /* ---------- persistent state ---------- */
 const LSKEY='glazedb:v1';
-let store={owned:{},stars:{},tags:{},mine:[],works:[]};
+let store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
 (store.mine||[]).forEach(m=>{if(!m.photos){m.photos=[m.id];m.main=m.id;}});
 store.works=store.works||[];
@@ -223,9 +223,20 @@ store.works.forEach(w=>{
   });
   w.glazes=[...g];delete w.links;
 });
+store.myGlazes=store.myGlazes||[];
+{
+  const known=new Set([...store.myGlazes.map(g=>g.name)]);
+  const promote=nm=>{if(typeof nm==='string'&&nm&&!known.has(nm)){
+    known.add(nm);store.myGlazes.push({name:nm,photo:null,hex:null,memo:'',ts:Date.now()});}};
+  (store.mine||[]).forEach(m=>{if(m.uNo==null)promote(m.uName);if(m.oNo==null)promote(m.oName);});
+  (store.works||[]).forEach(w=>(w.glazes||[]).forEach(promote));
+}
 const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
-const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
-const makeable=s=>s.u!=null&&s.o!=null&&ownedBrush(s.u)&&ownedBrush(s.o);
+const ownedKey=p=>typeof p==='number'?p:'n:'+p;
+const ownedBrush=p=>{const o=store.owned[ownedKey(p)];return !!(o&&o.b);};
+const myGlaze=nm=>(store.myGlazes||[]).find(g=>g.name===nm);
+const specPart=(no,nm)=>no!=null?no:nm;
+const makeable=s=>ownedBrush(specPart(s.u,s.uName!==undefined?s.uName:null))&&ownedBrush(specPart(s.o,s.oName!==undefined?s.oName:null));
 
 
 /* ---------- gist sync ---------- */
@@ -267,7 +278,7 @@ async function pullStore(){
     const g=await gh('/gists/'+id);
     const remote=JSON.parse(g.files[FNAME].content);
     if((remote._ts||0)>(store._ts||0)){
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[]},remote);
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]},remote);
       try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
       render();
     }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
@@ -540,8 +551,10 @@ function workMiniCards(ws,title){
 }
 function glazeName(part){return typeof part==='number'?(GMAP[part]?GMAP[part].name:part):part;}
 function glazeDot(part){
-  const g=typeof part==='number'?GMAP[part]:null;
-  return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${g&&g.hex?g.hex:'#CCC'};margin-right:5px;vertical-align:-1px"></span>`;
+  let hx='#CCC';
+  if(typeof part==='number'){const g=GMAP[part];if(g&&g.hex)hx=g.hex;}
+  else if(part){const g=myGlaze(part);if(g&&g.hex)hx=g.hex;}
+  return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${hx};margin-right:5px;vertical-align:-1px"></span>`;
 }
 function glazeChips(parts){
   return parts.map(p=>{
@@ -822,8 +835,11 @@ function openGlazeSelector(selected,onDone,onCancel,opts){
   function paint(){
     $('#pickN').textContent=sel.length;
     $('#pickList').innerHTML=GL.map(g=>
-      `<button class="tag ${has(g.no)?'on':''}" data-no="${g.no}">${num(g.no)}${glazeDot(g.no)}${g.name}</button>`).join('');
-    $('#pickCustom').innerHTML=sel.filter(p=>typeof p==='string').map(nm=>
+      `<button class="tag ${has(g.no)?'on':''}" data-no="${g.no}">${num(g.no)}${glazeDot(g.no)}${g.name}</button>`).join('')
+      +(store.myGlazes||[]).map(g=>
+      `<button class="tag ${has(g.name)?'on':''}" data-cus="${g.name.replace(/"/g,'&quot;')}">${num(g.name)}${glazeDot(g.name)}${g.name} ·내</button>`).join('');
+    const legacy=sel.filter(p=>typeof p==='string'&&!myGlaze(p));
+    $('#pickCustom').innerHTML=legacy.map(nm=>
       `<button class="tag on" data-cus="${nm.replace(/"/g,'&quot;')}">${num(nm)}${glazeDot(nm)}${nm} ✕</button>`).join('');
     $$('#pickList [data-no]').forEach(b=>b.onclick=()=>toggle(+b.dataset.no));
     $$('#pickCustom [data-cus]').forEach(b=>b.onclick=()=>toggle(b.dataset.cus));
@@ -832,7 +848,7 @@ function openGlazeSelector(selected,onDone,onCancel,opts){
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">${opts.title||'사용한 유약 선택'}</span><span class="dfam"><span id="pickN">${sel.length}</span>개</span></div>
     <p style="font-size:12.5px;color:var(--sub);margin:6px 2px 0">${opts.hint||'탭한 순서가 시유 순서로 기록돼요.'}</p>
     <div class="tagwrap" id="pickList" style="margin-top:12px;max-height:40dvh;overflow-y:auto"></div>
-    <div class="thd">직접 입력한 유약</div>
+    <div class="thd">목록에 없는 유약 (입력하면 내 유약으로 등록돼요)</div>
     <div class="tagwrap" id="pickCustom"></div>
     <div class="tagadd"><input id="pickX" placeholder="목록에 없는 유약 이름"><button class="btn" id="pickXAdd">추가</button></div>
     <div class="btnrow" style="margin-top:14px"><button class="btn" id="pickOk" style="background:var(--ink);color:#fff;border-color:var(--ink)">완료</button>
@@ -840,8 +856,10 @@ function openGlazeSelector(selected,onDone,onCancel,opts){
   paint();
   $('#pickXAdd').onclick=()=>{const v=$('#pickX').value.trim();
     if(!v)return;
-    if(has(v)){$('#pickX').value='';return;}
-    toggle(v);$('#pickX').value='';};
+    if(GL.some(g=>g.name===v)){alert('기본 목록에 이미 있는 유약이에요.');return;}
+    if(!myGlaze(v)){store.myGlazes.push({name:v,photo:null,hex:null,memo:'',ts:Date.now()});save();}
+    if(!has(v))toggle(v);else paint();
+    $('#pickX').value='';};
   $('#pickOk').onclick=()=>onDone(sel);
   $('#pickCancel').onclick=onCancel;
 }
@@ -903,13 +921,76 @@ function ownText(no){const o=store.owned[no]||{};
   return parts.length?('보유: '+parts.join(' · ')):'미보유';}
 function renderGlazeList(){
   glazeDetail=null;
+  const mineCards=(store.myGlazes||[]).map(g=>{
+    const img=g.photo&&photoCache[g.photo]?`<img src="${photoCache[g.photo]}" data-pid="${g.photo}" alt="">`:
+      `<span class="ph" style="background:${g.hex||'#E2DFD8'}"></span>`;
+    const n=(store.mine||[]).filter(m=>m.uName===g.name&&m.uNo==null||m.oName===g.name&&m.oNo==null).length;
+    return `<button class="gcard" data-gc="${g.name.replace(/"/g,'&quot;')}">${img}
+      <span><span class="no">내 유약</span> <span class="nm">${g.name}</span>
+      <div class="own">${ownText(g.name)}${n?` · 내 시편 ${n}개`:''}</div></span></button>`;
+  }).join('');
   $('#glazeView').innerHTML='<div class="glist">'+GL.map(g=>{
     const n=SP.filter(s=>s.u===g.no||s.o===g.no).length;
     const img=g.file?`<img src="singles/${g.file}" alt="">`:'<span class="ph">사진 없음</span>';
     return `<button class="gcard" data-g="${g.no}">${img}
       <span><span class="no">${g.no}</span> <span class="nm">${g.name}</span>
       <div class="own">${ownText(g.no)} · 조합 ${n}개</div></span></button>`;
-  }).join('')+'</div>';
+  }).join('')+mineCards+'</div>';
+  ensurePhotos();
+}
+function renderMyGlazeDetail(name){
+  glazeDetail='c:'+name;
+  const g=myGlaze(name); if(!g)return renderGlazeList();
+  const minespecs=SP.filter(s=>s.mine&&((s.u==null&&s.uName===name)||(s.o==null&&s.oName===name)));
+  const grid2=xs=>'<div class="grid">'+xs.map(cardHTML).join('')+'</div>';
+  $('#glazeView').innerHTML=`
+    <div class="backbar"><button id="gBack">← 유약 전체</button>
+      <span class="nm" style="font-weight:800">${g.name}</span>
+      <span style="font-size:12px;color:var(--sub)">내 유약 · ${ownText(g.name)}</span></div>
+    ${g.photo&&photoCache[g.photo]?`<img src="${photoCache[g.photo]}" data-pid="${g.photo}" alt="${g.name}" style="width:150px;border-radius:12px;border:1px solid var(--line)">`:''}
+    <div class="btnrow" style="margin-top:8px">
+      <button class="btn" id="mgPhoto">${g.photo?'사진 교체':'사진 등록'}</button>
+      <button class="btn warn" id="mgDel">이 유약 삭제</button></div>
+    <div class="thd">메모 <button id="mgMemo" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
+    <p style="margin:4px 2px;font-size:14px;white-space:pre-wrap" id="mgMemoView">${(g.memo||'—').replace(/</g,'&lt;')}</p>
+    ${workMiniCards(glazeWorks(name),'이 유약을 쓴 작품')}
+    <div class="gsec">이 유약이 들어간 내 시편 <b>${minespecs.length}</b></div>
+    ${minespecs.length?grid2(minespecs):'<div class="empty">없음</div>'}`;
+  $('#mgPhoto').onclick=()=>{
+    $('#scrim').classList.add('open');
+    openCropPick(async b64=>{
+      if(g.photo)removePhoto(g.photo);
+      const pid=newId();
+      await idb.put(pid,b64);photoCache[pid]=b64url(b64);
+      if(getToken())pushPhoto(pid,b64).catch(()=>{});
+      const im=new Image();
+      im.onload=()=>{const cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;
+        cv.getContext('2d').drawImage(im,0,0);g.hex=canvasHex(cv);save();closeSheet();renderMyGlazeDetail(name);};
+      im.src='data:image/jpeg;base64,'+b64;
+      g.photo=pid;
+    },()=>{closeSheet();renderMyGlazeDetail(name);});
+  };
+  $('#mgMemo').onclick=()=>{
+    $('#mgMemoView').outerHTML=`<textarea id="mgBox" style="width:100%;max-width:420px;height:64px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:13.5px">${g.memo||''}</textarea>
+      <div class="btnrow" style="margin-top:6px"><button class="btn" id="mgSave">저장</button></div>`;
+    $('#mgSave').onclick=()=>{g.memo=$('#mgBox').value.trim();save();renderMyGlazeDetail(name);};
+  };
+  $('#mgDel').onclick=()=>{
+    if(!confirm('이 유약을 목록에서 삭제할까요? (이미 기록된 시편·작품의 이름은 그대로 남아요)'))return;
+    if(g.photo)removePhoto(g.photo);
+    store.myGlazes=store.myGlazes.filter(x=>x.name!==name);save();
+    renderGlazeList();
+  };
+  ensurePhotos();
+}
+function openGlazeAdd(){
+  const nm=prompt('추가할 유약 이름');
+  if(!nm)return;
+  const v=nm.trim();
+  if(!v)return;
+  if(GL.some(g=>g.name===v)||myGlaze(v)){alert('이미 목록에 있는 유약이에요.');return;}
+  store.myGlazes.push({name:v,photo:null,hex:null,memo:'',ts:Date.now()});save();
+  renderGlazeList();
 }
 function renderGlazeDetail(no){
   glazeDetail=no; const g=GMAP[no];
@@ -931,6 +1012,7 @@ $('#workView').addEventListener('click',e=>{
 $('#glazeView').addEventListener('click',e=>{
   const wk=e.target.closest('[data-work]'); if(wk)return openWorkSheet(wk.dataset.work);
   if(e.target.id==='gBack')return renderGlazeList();
+  const gcu=e.target.closest('[data-gc]'); if(gcu)return renderMyGlazeDetail(gcu.dataset.gc);
   const c=e.target.closest('.card'); if(c)return openSheet(c.dataset.code);
   const gc=e.target.closest('.gcard'); if(gc)renderGlazeDetail(+gc.dataset.g);
 });
@@ -945,6 +1027,10 @@ function renderSettings(){
       return `<tr><td><span class="no">${g.no}</span> ${g.name}</td>
         <td class="c"><input type="checkbox" data-no="${g.no}" data-f="b" ${o.b?'checked':''} aria-label="${g.name} 붓시유용 보유"></td>
         <td class="c"><input type="checkbox" data-no="${g.no}" data-f="d" ${o.d?'checked':''} aria-label="${g.name} 담금용 보유"></td></tr>`;}).join('')}
+    ${(store.myGlazes||[]).map(g=>{const o=store.owned['n:'+g.name]||{};
+      return `<tr><td><span class="no">내</span> ${g.name}</td>
+        <td class="c"><input type="checkbox" data-cus="${g.name.replace(/"/g,'&quot;')}" data-f="b" ${o.b?'checked':''} aria-label="${g.name} 붓시유용 보유"></td>
+        <td class="c"><input type="checkbox" data-cus="${g.name.replace(/"/g,'&quot;')}" data-f="d" ${o.d?'checked':''} aria-label="${g.name} 담금용 보유"></td></tr>`;}).join('')}
     </tbody></table>
     <div class="iohd">기기 간 동기화</div>
     <p class="help">GitHub 토큰(gist 권한만)을 붙여넣으면 즐겨찾기·별점·태그·보유가 비공개 gist에 자동 저장되고, 같은 토큰을 넣은 다른 기기와 연동돼요.</p>
@@ -960,9 +1046,13 @@ function renderSettings(){
     </div>`;
 }
 $('#setView').addEventListener('change',e=>{
-  const el=e.target; if(!el.dataset.no)return;
-  const no=+el.dataset.no; store.owned[no]=store.owned[no]||{};
-  store.owned[no][el.dataset.f]=el.checked; save();
+  const el=e.target;
+  let key=null;
+  if(el.dataset.no)key=+el.dataset.no;
+  else if(el.dataset.cus)key='n:'+el.dataset.cus;
+  if(key==null)return;
+  store.owned[key]=store.owned[key]||{};
+  store.owned[key][el.dataset.f]=el.checked; save();
 });
 $('#setView').addEventListener('click',e=>{
   if(e.target.id==='ghSave'){const v=$('#ghToken').value.trim();
@@ -973,10 +1063,10 @@ $('#setView').addEventListener('click',e=>{
     localStorage.removeItem(TKEY);localStorage.removeItem(GKEY);renderSettings();return;}
   if(e.target.id==='ioImport'){try{
       const v=JSON.parse($('#ioBox').value);
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[]},v);save();renderSettings();alert('가져왔어요.');
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]},v);save();renderSettings();alert('가져왔어요.');
     }catch(err){alert('형식이 올바르지 않아요. 내보내기 내용을 그대로 붙여넣어 주세요.');}}
   if(e.target.id==='ioReset'&&confirm('보유·별점·태그를 모두 지울까요?')){
-    store={owned:{},stars:{},tags:{},mine:[],works:[]};save();renderSettings();}
+    store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]};save();renderSettings();}
 });
 
 /* ---------- tabs ---------- */
@@ -987,10 +1077,14 @@ function renderTab(){
   $('#setView').hidden=curTab!=='set';
   $('#toolbar').style.display=curTab==='spec'?'':'none';
   const fabEl=document.querySelector('.fab');
-  if(fabEl)fabEl.style.display=(curTab==='spec'||curTab==='work')?'':'none';
+  if(fabEl)fabEl.style.display=(curTab==='spec'||curTab==='work'||curTab==='glaze')?'':'none';
   if(curTab==='spec')render();
   if(curTab==='work')renderWorks();
-  if(curTab==='glaze')(glazeDetail?renderGlazeDetail(glazeDetail):renderGlazeList());
+  if(curTab==='glaze'){
+    if(typeof glazeDetail==='string'&&glazeDetail.startsWith('c:'))renderMyGlazeDetail(glazeDetail.slice(2));
+    else if(glazeDetail)renderGlazeDetail(glazeDetail);
+    else renderGlazeList();
+  }
   if(curTab==='set')renderSettings();
 }
 $$('nav.tabs button').forEach(b=>b.onclick=()=>{
@@ -1001,7 +1095,7 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
 
 const fab=document.createElement('button');fab.className='fab';fab.textContent='+';
 fab.setAttribute('aria-label','추가');
-fab.onclick=()=>{if(curTab==='work'){workDraft=null;openWorkAdd();}else{specDraft=null;openAddSheet();}};
+fab.onclick=()=>{if(curTab==='work'){workDraft=null;openWorkAdd();}else if(curTab==='glaze'){openGlazeAdd();}else{specDraft=null;openAddSheet();}};
 document.body.appendChild(fab);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 (function(){
