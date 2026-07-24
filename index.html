@@ -67,6 +67,14 @@ main{max-width:1080px;margin:0 auto;padding:4px 16px 80px}
 .sticker{display:inline-block;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:3px;padding:1px 7px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.02em}
 .card .star{position:absolute;top:5px;right:6px;font-size:12px;color:#E0A422;text-shadow:0 0 3px #fff}
 .minebadge{position:absolute;top:5px;left:6px;font-size:10px;background:var(--accent);color:#fff;border-radius:3px;padding:1px 5px;font-weight:700}
+.thumbs{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:4px 0 8px}
+.thumbs img{width:44px;height:50px;object-fit:cover;border-radius:6px;border:2px solid transparent}
+.thumbs img.cur{border-color:var(--ink)}
+.thumbs img.mainmark{outline:2px solid var(--accent);outline-offset:1px}
+.thumbadd{width:44px;height:50px;border:1px dashed var(--line);border-radius:6px;color:var(--sub);font-size:18px}
+.minirow{display:flex;gap:8px;flex-wrap:wrap}
+.mini{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:5px 9px 5px 5px;font-size:12.5px;font-weight:600}
+.mini img{width:30px;height:34px;object-fit:cover;border-radius:5px}
 .fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:30;width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:26px;box-shadow:0 6px 18px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center}
 .cropbox{width:232px;height:264px;margin:10px auto;border-radius:10px;overflow:hidden;position:relative;background:#EEE;border:1px solid var(--line);touch-action:none}
 .cropbox img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none}
@@ -152,6 +160,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
   <div class="brand"><h1>유약 시편</h1><span class="count" id="totalCount"></span></div>
   <nav class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="spec">시편</button>
+    <button role="tab" aria-selected="false" data-tab="work">작품</button>
     <button role="tab" aria-selected="false" data-tab="glaze">유약</button>
     <button role="tab" aria-selected="false" data-tab="set">설정</button>
   </nav>
@@ -182,6 +191,7 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
 
 <main>
   <section id="specView"><div id="grid"></div><div class="empty" id="emptyMsg" hidden></div></section>
+  <section id="workView" hidden></section>
   <section id="glazeView" hidden></section>
   <section id="setView" class="settings" hidden></section>
 </main>
@@ -199,8 +209,10 @@ const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈',
 
 /* ---------- persistent state ---------- */
 const LSKEY='glazedb:v1';
-let store={owned:{},stars:{},tags:{},mine:[]};
+let store={owned:{},stars:{},tags:{},mine:[],works:[]};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
+(store.mine||[]).forEach(m=>{if(!m.photos){m.photos=[m.id];m.main=m.id;}});
+store.works=store.works||[];
 const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
 const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
 const makeable=s=>s.u!=null&&s.o!=null&&ownedBrush(s.u)&&ownedBrush(s.o);
@@ -245,7 +257,7 @@ async function pullStore(){
     const g=await gh('/gists/'+id);
     const remote=JSON.parse(g.files[FNAME].content);
     if((remote._ts||0)>(store._ts||0)){
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},remote);
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[]},remote);
       try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
       render();
     }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
@@ -275,7 +287,7 @@ function mineToSpec(m){
   return {code:'u:'+m.id, id:m.id, disp:m.disp, u:m.uNo, o:m.oNo,
     uName:m.uName, oName:m.oName, hex:m.hex,
     grp:m.grp!=null?m.grp:assignGrp(m.hex), hue:h, l:l,
-    rev:null, mine:true, memo:m.memo||''};
+    rev:null, mine:true, memo:m.memo||'', photos:m.photos, main:m.main};
 }
 function mergeMine(){
   for(let i=SP.length-1;i>=0;i--)if(SP[i].mine)SP.splice(i,1);
@@ -333,11 +345,14 @@ async function removePhoto(id){
 let photosFetching=false;
 async function ensurePhotos(){
   const need=[];
-  for(const m of (store.mine||[])){
-    if(photoCache[m.id])continue;
-    const b=await idb.get(m.id);
-    if(b){photoCache[m.id]=b64url(b);continue;}
-    need.push(m.id);
+  const pids=[];
+  (store.mine||[]).forEach(m=>pids.push(...(m.photos||[m.id])));
+  (store.works||[]).forEach(w=>pids.push(...(w.photos||[])));
+  for(const pid of pids){
+    if(photoCache[pid])continue;
+    const b=await idb.get(pid);
+    if(b){photoCache[pid]=b64url(b);continue;}
+    need.push(pid);
   }
   if(need.length&&getToken()&&!photosFetching){
     photosFetching=true;
@@ -401,8 +416,8 @@ function filtered(){
 /* ---------- render: gallery ---------- */
 function cardHTML(s){
   const st=store.stars[s.code];
-  const img=s.mine?(photoCache[s.id]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
-  const pid=s.mine?` data-pid="${s.id}"`:'';
+  const img=s.mine?(photoCache[s.main]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
+  const pid=s.mine?` data-pid="${s.main}"`:'';
   return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.disp||s.code}">
     <img src="${img}"${pid} alt="" loading="lazy">
     ${s.mine?'<span class="minebadge">내 시편</span>':''}
@@ -447,62 +462,117 @@ function glazeRowCustom(role,name){
   return `<div class="rrow"><span class="ph"></span><span class="role">${role}</span>
     <span><span class="gname">${name}</span> <span class="gno">직접 입력</span></span></div>`;
 }
-function openMineSheet(s){
+const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+function findMine(id){return (store.mine||[]).find(m=>m.id===id);}
+function findWork(id){return (store.works||[]).find(w=>w.id===id);}
+async function recomputeFromMain(entry){
+  const b64=await idb.get(entry.main); if(!b64)return;
+  await new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{
+      const cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;
+      cv.getContext('2d').drawImage(im,0,0);
+      entry.hex=canvasHex(cv);entry.grp=assignGrp(entry.hex);res();
+    };
+    im.onerror=res;
+    im.src='data:image/jpeg;base64,'+b64;
+  });
+}
+function thumbsHTML(entry,viewPid){
+  return `<div class="thumbs">${entry.photos.map(p=>
+    `<img src="${photoCache[p]||''}" data-pid="${p}" data-thumb="${p}"
+      class="${p===viewPid?'cur':''}${p===entry.main?' mainmark':''}" alt="">`).join('')}
+    <button class="thumbadd" data-act="addphoto">＋</button></div>`;
+}
+function wirePhotoMgmt(entry,viewPid,reopen){
+  $$('#sheet [data-thumb]').forEach(t=>t.onclick=()=>reopen(t.dataset.thumb));
+  const set=$('#setMain'), del=$('#delPhoto'), add=$('#sheet [data-act="addphoto"]');
+  if(set)set.onclick=async()=>{
+    entry.main=viewPid;
+    await recomputeFromMain(entry);
+    save();reopen(viewPid);
+  };
+  if(del)del.onclick=async()=>{
+    if(entry.photos.length<=1){alert('사진이 하나뿐이면 삭제할 수 없어요.');return;}
+    if(!confirm('이 사진을 삭제할까요?'))return;
+    entry.photos=entry.photos.filter(p=>p!==viewPid);
+    removePhoto(viewPid);
+    if(entry.main===viewPid){entry.main=entry.photos[0];await recomputeFromMain(entry);}
+    save();reopen(entry.main);
+  };
+  if(add)add.onclick=()=>openCropPick(async b64=>{
+    const pid=newId();
+    await idb.put(pid,b64);photoCache[pid]=b64url(b64);
+    if(getToken())pushPhoto(pid,b64).catch(()=>{});
+    entry.photos.push(pid);save();reopen(pid);
+  },()=>reopen(viewPid));
+}
+function wireMemoEdit(entry,reopen){
+  const b=$('#memoEdit'); if(!b)return;
+  b.onclick=()=>{
+    const cur=$('#memoView');
+    cur.outerHTML=`<textarea id="memoBox" style="width:100%;height:70px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:13.5px">${(entry.memo||'')}</textarea>
+      <div class="btnrow" style="margin-top:6px"><button class="btn" id="memoSave">메모 저장</button></div>`;
+    $('#memoSave').onclick=()=>{entry.memo=$('#memoBox').value.trim();save();reopen(null);};
+  };
+}
+function worksUsing(code){
+  return (store.works||[]).filter(w=>(w.links||[]).includes(code));
+}
+function workMiniCards(ws){
+  if(!ws.length)return '';
+  return `<div class="thd">이 조합으로 만든 작품</div><div class="minirow">${ws.map(w=>
+    `<button class="mini" data-work="${w.id}"><img src="${photoCache[w.main]||''}" data-pid="${w.main}" alt="">
+     <span>${(w.title||'무제').replace(/</g,'&lt;')}</span></button>`).join('')}</div>`;
+}
+function openMineSheet(s,viewPid){
+  const entry=findMine(s.id); if(!entry)return;
+  viewPid=viewPid||entry.main;
   const st=store.stars[s.code]||0;
   const tagNames=Object.keys(store.tags).sort();
   const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
   const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
+  const ws=worksUsing(s.code);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
-    <img class="dimg" src="${photoCache[s.id]||''}" data-pid="${s.id}" alt="내 시편 ${s.disp}">
+    <img class="dimg" src="${photoCache[viewPid]||''}" data-pid="${viewPid}" alt="내 시편 ${s.disp}">
+    ${thumbsHTML(entry,viewPid)}
+    <div class="btnrow" style="justify-content:center">
+      ${viewPid!==entry.main?'<button class="btn" id="setMain">메인으로 지정</button>':''}
+      <button class="btn" id="delPhoto">이 사진 삭제</button></div>
     <div class="stars" role="group" aria-label="별점">
       ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
     </div>
     <div class="recipe">${r1}${r2}</div>
-    ${s.memo?`<div class="thd">메모</div><p style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${s.memo.replace(/</g,'&lt;')}</p>`:''}
+    <div class="thd">메모 <button id="memoEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
+    <p id="memoView" style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${(s.memo||'—').replace(/</g,'&lt;')}</p>
+    ${workMiniCards(ws)}
     <div class="thd">태그</div>
     <div class="tagwrap">${tagNames.map(t=>{
       const on=(store.tags[t]||[]).includes(s.code);
       return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
     <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>
-    ${getToken()?'<div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="'+s.id+'">이 시편 삭제</button></div>':''}`;
+    <div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="${s.id}">이 시편 삭제</button></div>`;
   $('#sheet').dataset.code=s.code;
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
+  const reopen=p=>{mergeMine();const s2=SP.find(x=>x.code===s.code);if(s2)openMineSheet(s2,p||entry.main);};
+  wirePhotoMgmt(entry,viewPid,reopen);
+  wireMemoEdit(entry,()=>reopen(viewPid));
+  $$('#sheet [data-work]').forEach(b=>b.onclick=()=>openWorkSheet(b.dataset.work));
+  ensurePhotos();
 }
+/* ---------- crop picker (shared) ---------- */
 let crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-function glazeOptions(){
-  return '<option value="">선택</option>'
-    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
-    +'<option value="etc">기타 (직접 입력)</option>';
+function cropUI(){
+  return `<div class="formrow"><label>사진</label>
+      <input type="file" id="cpFile" accept="image/*"></div>
+    <div class="cropbox" id="cpBox"><img id="cpImg" alt="" hidden></div>
+    <input type="range" class="zoom" id="cpZoom" min="1" max="3.5" step="0.01" value="1" hidden>`;
 }
-function openAddSheet(){
-  if(!getToken()){
-    alert('시편 등록은 내 기기 전용 기능이라, 설정 탭에서 동기화 토큰을 먼저 연결해주세요.');
-    curTab='set';$$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab==='set'));renderTab();return;
-  }
+function wireCrop(){
+  const box=$('#cpBox'), im=$('#cpImg'), zoom=$('#cpZoom');
   crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
-    <div class="formrow"><label>사진</label>
-      <input type="file" id="addPhoto" accept="image/*" capture="environment"></div>
-    <div class="cropbox" id="cropbox"><img id="cropimg" alt="" hidden></div>
-    <input type="range" class="zoom" id="cropzoom" min="1" max="3.5" step="0.01" value="1" hidden>
-    <div class="formrow"><label>밑유약 (먼저 시유)</label>
-      <select id="addU">${glazeOptions()}</select>
-      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>윗유약 (나중 시유)</label>
-      <select id="addO">${glazeOptions()}</select>
-      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
-    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
-    <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
-    <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
-  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
-  document.body.style.overflow='hidden';
-  wireAddForm();
-}
-function wireAddForm(){
-  const box=$('#cropbox'), im=$('#cropimg'), zoom=$('#cropzoom');
   function apply(){
     const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
     const minx=232-crop.iw*s, miny=264-crop.ih*s;
@@ -510,14 +580,13 @@ function wireAddForm(){
     crop.ty=Math.min(0,Math.max(miny,crop.ty));
     im.style.transform=`translate(${crop.tx}px,${crop.ty}px) scale(${s})`;
   }
-  $('#addPhoto').onchange=e=>{
+  $('#cpFile').onchange=e=>{
     const f=e.target.files[0]; if(!f)return;
-    const url=URL.createObjectURL(f);
     im.onload=()=>{crop.iw=im.naturalWidth;crop.ih=im.naturalHeight;
       crop.z=1;const s0=Math.max(232/crop.iw,264/crop.ih);
       crop.tx=(232-crop.iw*s0)/2;crop.ty=(264-crop.ih*s0)/2;
       im.hidden=false;zoom.hidden=false;crop.img=im;apply();};
-    im.src=url;
+    im.src=URL.createObjectURL(f);
   };
   zoom.oninput=()=>{crop.z=+zoom.value;apply();};
   let drag=null;
@@ -525,9 +594,6 @@ function wireAddForm(){
   box.addEventListener('pointermove',e=>{if(!drag)return;
     crop.tx+=e.clientX-drag.x;crop.ty+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};apply();});
   box.addEventListener('pointerup',()=>drag=null);
-  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
-  wire('#addU','#addUx');wire('#addO','#addOx');
-  $('#addSubmit').onclick=submitAdd;
 }
 function cropToCanvas(){
   const cv=document.createElement('canvas');cv.width=464;cv.height=528;
@@ -545,6 +611,46 @@ function canvasHex(cv){
   const hx=v=>Math.round(v/n).toString(16).padStart(2,'0').toUpperCase();
   return '#'+hx(r)+hx(g)+hx(b);
 }
+function openCropPick(onDone,onCancel){
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">사진 추가</span></div>
+    ${cropUI()}
+    <div class="btnrow"><button class="btn" id="cpOk" style="background:var(--ink);color:#fff;border-color:var(--ink)">추가</button>
+    <button class="btn" id="cpCancel">취소</button></div>`;
+  wireCrop();
+  $('#cpOk').onclick=()=>{
+    if(!crop.img){alert('사진을 선택해주세요.');return;}
+    onDone(cropToCanvas().toDataURL('image/jpeg',0.88).split(',')[1]);
+  };
+  $('#cpCancel').onclick=onCancel;
+}
+/* ---------- add specimen ---------- */
+function glazeOptions(){
+  return '<option value="">선택</option>'
+    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
+    +'<option value="etc">기타 (직접 입력)</option>';
+}
+function openAddSheet(){
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
+    <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">이 시편은 이 기기에 저장돼요.</p>
+    ${cropUI()}
+    <div class="formrow"><label>밑유약 (먼저 시유)</label>
+      <select id="addU">${glazeOptions()}</select>
+      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
+    <div class="formrow"><label>윗유약 (나중 시유)</label>
+      <select id="addO">${glazeOptions()}</select>
+      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
+    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
+    <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
+    <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+  wireCrop();
+  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
+  wire('#addU','#addUx');wire('#addO','#addOx');
+  $('#addSubmit').onclick=submitAdd;
+}
 async function submitAdd(){
   const uv=$('#addU').value, ov=$('#addO').value;
   const uName=uv==='etc'?$('#addUx').value.trim():uv?GMAP[+uv].name:'';
@@ -555,27 +661,134 @@ async function submitAdd(){
   try{
     const cv=cropToCanvas(), hex=canvasHex(cv);
     const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
-    const id=Date.now().toString(36);
+    const id=newId(), pid=newId();
     const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
     const disp=(uNo??uName)+'-'+(oNo??oName);
     const entry={id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
-      memo:$('#addMemo').value.trim(),ts:Date.now()};
-    await idb.put(id,b64);
-    photoCache[id]=b64url(b64);
+      memo:$('#addMemo').value.trim(),ts:Date.now(),photos:[pid],main:pid};
+    await idb.put(pid,b64);
+    photoCache[pid]=b64url(b64);
     store.mine=store.mine||[];store.mine.push(entry);save();
-    pushPhoto(id,b64).catch(e=>alert('사진 동기화 실패(이 기기엔 저장됨): '+e.message));
+    if(getToken())pushPhoto(pid,b64).catch(()=>{});
     closeSheet();
   }catch(e){st.textContent='실패: '+e.message;}
 }
 async function deleteMine(id){
   if(!confirm('이 시편을 삭제할까요?'))return;
+  const entry=findMine(id);
+  (entry&&entry.photos||[]).forEach(p=>removePhoto(p));
   store.mine=(store.mine||[]).filter(m=>m.id!==id);save();
-  removePhoto(id);
   closeSheet();
+}
+/* ---------- works ---------- */
+function renderWorks(){
+  const ws=[...(store.works||[])].sort((a,b)=>b.ts-a.ts);
+  $('#workView').innerHTML=ws.length
+    ?`<div class="grid">${ws.map(w=>`<button class="card" data-work="${w.id}">
+        <img src="${photoCache[w.main]||''}" data-pid="${w.main}" alt="" loading="lazy">
+        <span class="sticker" style="font-family:var(--sans)">${(w.title||'무제').replace(/</g,'&lt;')}</span></button>`).join('')}</div>`
+    :'<div class="empty">아직 작품이 없어요.<br>+ 버튼으로 첫 작품을 등록해보세요.</div>';
+  ensurePhotos();
+}
+function specChip(code){
+  const s=SP.find(x=>x.code===code);
+  if(!s)return `<span class="tag" style="opacity:.5">${code} (삭제됨)</span>`;
+  return `<button class="mini" data-spec="${code}">
+    <img src="${s.mine?(photoCache[s.main||s.id]||''):'crops/'+s.file}" ${s.mine?`data-pid="${s.main||s.id}"`:''} alt="">
+    <span>${s.disp||s.code}</span></button>`;
+}
+function openWorkSheet(id,viewPid){
+  const w=findWork(id); if(!w)return;
+  viewPid=viewPid||w.main;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:19px;font-weight:800">${(w.title||'무제').replace(/</g,'&lt;')}</span><span class="dfam">내 작품</span></div>
+    <img class="dimg" src="${photoCache[viewPid]||''}" data-pid="${viewPid}" alt="작품">
+    ${thumbsHTML(w,viewPid)}
+    <div class="btnrow" style="justify-content:center">
+      ${viewPid!==w.main?'<button class="btn" id="setMain">메인으로 지정</button>':''}
+      <button class="btn" id="delPhoto">이 사진 삭제</button></div>
+    <div class="thd">메모 <button id="memoEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
+    <p id="memoView" style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${(w.memo||'—').replace(/</g,'&lt;')}</p>
+    <div class="thd">사용한 조합 <button id="linksEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
+    <div class="minirow">${(w.links||[]).map(specChip).join('')||'<span style="color:var(--sub);font-size:13px">연결된 조합이 없어요</span>'}</div>
+    <div class="btnrow" style="margin-top:18px"><button class="btn warn" id="workDel">이 작품 삭제</button></div>`;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+  const reopen=p=>openWorkSheet(id,p||w.main);
+  const wm={...w, main:w.main};
+  wirePhotoMgmt(w,viewPid,reopen);
+  wireMemoEdit(w,()=>reopen(viewPid));
+  $('#linksEdit').onclick=()=>openSpecSelector(w.links||[],sel=>{
+    w.links=sel;save();reopen(viewPid);
+  },()=>reopen(viewPid));
+  $('#workDel').onclick=()=>{
+    if(!confirm('이 작품을 삭제할까요?'))return;
+    (w.photos||[]).forEach(p=>removePhoto(p));
+    store.works=(store.works||[]).filter(x=>x.id!==id);save();
+    closeSheet();renderWorks();
+  };
+  $$('#sheet [data-spec]').forEach(b=>b.onclick=()=>openSheet(b.dataset.spec));
+  ensurePhotos();
+}
+let workDraft=null;
+function openWorkAdd(){
+  if(!workDraft)workDraft={title:'',memo:'',links:[],b64:null};
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">작품 추가</span></div>
+    <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">이 작품은 이 기기에 저장돼요.</p>
+    ${workDraft.b64?`<img class="dimg" src="data:image/jpeg;base64,${workDraft.b64}" alt="">`:cropUI()}
+    <div class="formrow"><label>제목</label><input type="text" id="wTitle" value="${workDraft.title.replace(/"/g,'&quot;')}"></div>
+    <div class="formrow"><label>메모</label><textarea id="wMemo">${workDraft.memo}</textarea></div>
+    <div class="formrow"><label>사용한 조합</label>
+      <button class="btn" id="wLinks">조합 선택 (${workDraft.links.length})</button></div>
+    <div class="btnrow"><button class="btn" id="wSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button></div>`;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+  if(!workDraft.b64)wireCrop();
+  const grab=()=>{workDraft.title=$('#wTitle').value;workDraft.memo=$('#wMemo').value;
+    if(!workDraft.b64&&crop.img)workDraft.b64=cropToCanvas().toDataURL('image/jpeg',0.88).split(',')[1];};
+  $('#wLinks').onclick=()=>{grab();
+    openSpecSelector(workDraft.links,sel=>{workDraft.links=sel;openWorkAdd();},()=>openWorkAdd());};
+  $('#wSubmit').onclick=async()=>{
+    grab();
+    if(!workDraft.b64){alert('사진을 선택해주세요.');return;}
+    const id=newId(), pid=newId();
+    await idb.put(pid,workDraft.b64);
+    photoCache[pid]=b64url(workDraft.b64);
+    if(getToken())pushPhoto(pid,workDraft.b64).catch(()=>{});
+    store.works=store.works||[];
+    store.works.push({id,title:workDraft.title.trim(),memo:workDraft.memo.trim(),
+      links:workDraft.links,photos:[pid],main:pid,ts:Date.now()});
+    save();workDraft=null;
+    closeSheet();renderWorks();
+  };
+}
+function openSpecSelector(selected,onDone,onCancel){
+  let sel=new Set(selected);
+  function list(q){
+    const xs=SP.filter(s=>!q||(s.disp||s.code).includes(q)||(GMAP[s.u]&&GMAP[s.u].name.includes(q))||(GMAP[s.o]&&GMAP[s.o].name.includes(q)));
+    const top=xs.filter(s=>sel.has(s.code)), rest=xs.filter(s=>!sel.has(s.code)).slice(0,80);
+    return [...top,...rest].map(s=>`<button class="tag ${sel.has(s.code)?'on':''}" data-pick="${s.code}">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.hex};margin-right:5px;vertical-align:-1px"></span>${s.disp||s.code}${s.mine?' ·내':''}</button>`).join('');
+  }
+  function paint(){$('#pickList').innerHTML=list($('#pickQ').value.trim());
+    $$('#pickList [data-pick]').forEach(b=>b.onclick=()=>{
+      const c=b.dataset.pick; sel.has(c)?sel.delete(c):sel.add(c); paint();});
+    $('#pickN').textContent=sel.size;}
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">사용한 조합 선택</span><span class="dfam"><span id="pickN">${sel.size}</span>개</span></div>
+    <div class="tagadd" style="margin-top:10px"><input id="pickQ" placeholder="코드나 유약명으로 찾기 (예: 24-14, 옥색)"></div>
+    <div class="tagwrap" id="pickList" style="margin-top:10px;max-height:44dvh;overflow-y:auto"></div>
+    <div class="btnrow" style="margin-top:14px"><button class="btn" id="pickOk" style="background:var(--ink);color:#fff;border-color:var(--ink)">완료</button>
+    <button class="btn" id="pickCancel">취소</button></div>`;
+  $('#pickQ').oninput=paint; paint();
+  $('#pickOk').onclick=()=>onDone([...sel]);
+  $('#pickCancel').onclick=onCancel;
 }
 function openSheet(code){
   const s=SP.find(x=>x.code===code); if(!s)return;
   if(s.mine)return openMineSheet(s);
+
 
   const mk=makeable(s), st=store.stars[code]||0;
   const tagNames=Object.keys(store.tags).sort();
@@ -647,6 +860,9 @@ function renderGlazeDetail(no){
     <div class="gsec">밑유약으로 쓴 조합 <b>${under.length}</b></div>${under.length?grid(under):'<div class="empty">없음</div>'}
     <div class="gsec">윗유약으로 쓴 조합 <b>${over.length}</b></div>${over.length?grid(over):'<div class="empty">없음</div>'}`;
 }
+$('#workView').addEventListener('click',e=>{
+  const c=e.target.closest('[data-work]'); if(c)openWorkSheet(c.dataset.work);
+});
 $('#glazeView').addEventListener('click',e=>{
   if(e.target.id==='gBack')return renderGlazeList();
   const c=e.target.closest('.card'); if(c)return openSheet(c.dataset.code);
@@ -691,19 +907,23 @@ $('#setView').addEventListener('click',e=>{
     localStorage.removeItem(TKEY);localStorage.removeItem(GKEY);renderSettings();return;}
   if(e.target.id==='ioImport'){try{
       const v=JSON.parse($('#ioBox').value);
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},v);save();renderSettings();alert('가져왔어요.');
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[]},v);save();renderSettings();alert('가져왔어요.');
     }catch(err){alert('형식이 올바르지 않아요. 내보내기 내용을 그대로 붙여넣어 주세요.');}}
   if(e.target.id==='ioReset'&&confirm('보유·별점·태그를 모두 지울까요?')){
-    store={owned:{},stars:{},tags:{},mine:[]};save();renderSettings();}
+    store={owned:{},stars:{},tags:{},mine:[],works:[]};save();renderSettings();}
 });
 
 /* ---------- tabs ---------- */
 function renderTab(){
   $('#specView').hidden=curTab!=='spec';
+  $('#workView').hidden=curTab!=='work';
   $('#glazeView').hidden=curTab!=='glaze';
   $('#setView').hidden=curTab!=='set';
   $('#toolbar').style.display=curTab==='spec'?'':'none';
+  const fabEl=document.querySelector('.fab');
+  if(fabEl)fabEl.style.display=(curTab==='spec'||curTab==='work')?'':'none';
   if(curTab==='spec')render();
+  if(curTab==='work')renderWorks();
   if(curTab==='glaze')(glazeDetail?renderGlazeDetail(glazeDetail):renderGlazeList());
   if(curTab==='set')renderSettings();
 }
@@ -714,7 +934,9 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
 });
 
 const fab=document.createElement('button');fab.className='fab';fab.textContent='+';
-fab.setAttribute('aria-label','시편 추가');fab.onclick=openAddSheet;document.body.appendChild(fab);
+fab.setAttribute('aria-label','추가');
+fab.onclick=()=>{if(curTab==='work'){workDraft=null;openWorkAdd();}else openAddSheet();};
+document.body.appendChild(fab);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 (function(){
   const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
