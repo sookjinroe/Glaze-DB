@@ -1,4 +1,4 @@
-const VER = 'glazedb-sw-v1';
+const VER = 'glazedb-sw-v2';
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks =>
@@ -8,14 +8,14 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;           // fonts etc: network
-  if (e.request.mode === 'navigate' || url.pathname.endsWith('data.js')) {
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('data.js')||url.pathname.endsWith('user-specimens.json')) {
     // app shell & data: network first, cache fallback (updates flow through)
     e.respondWith(
       fetch(e.request).then(r => {
         const cp = r.clone();
         caches.open(VER).then(c => c.put(e.request, cp));
         return r;
-      }).catch(() => caches.match(e.request, {ignoreSearch: url.pathname.endsWith('data.js')}))
+      }).catch(() => caches.match(e.request, {ignoreSearch: url.pathname.endsWith('data.js')||url.pathname.endsWith('user-specimens.json')}))
     );
     return;
   }
