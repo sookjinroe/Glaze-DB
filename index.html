@@ -208,11 +208,13 @@ try{
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const SP=window.DATA.specimens, GL=window.DATA.glazes;
 const GMAP=Object.fromEntries(GL.map(g=>[g.no,g]));
+const BASE=Object.fromEntries(SP.map(s=>[s.code,{hex:s.hex,grp:s.grp,hue:s.hue,l:s.l}]));
+const WALL=new Set(SP.map(s=>s.code));
 const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈','갈','흑갈','팥·분홍','황','황갈','올리브','녹','청록','하늘','파랑','남색','회','청흑','흑'];
 
 /* ---------- persistent state ---------- */
 const LSKEY='glazedb:v1';
-let store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]};
+let store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[],glazeMy:{}};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
 (store.mine||[]).forEach(m=>{if(!m.photos){m.photos=[m.id];m.main=m.id;}});
 store.works=store.works||[];
@@ -227,6 +229,22 @@ store.works.forEach(w=>{
   w.glazes=[...g];delete w.links;
 });
 store.myGlazes=store.myGlazes||[];
+store.glazeMy=store.glazeMy||{};
+(store.mine||[]).forEach(m=>{
+  if(m.uNo!=null&&m.oNo!=null){
+    const wc=m.uNo+'-'+m.oNo, old='u:'+m.id;
+    if(WALL.has(wc)){
+      if(store.stars[old]!=null){
+        store.stars[wc]=Math.max(store.stars[wc]||0,store.stars[old]);
+        delete store.stars[old];
+      }
+      Object.values(store.tags||{}).forEach(arr=>{
+        const i=arr.indexOf(old);
+        if(i>=0){if(arr.includes(wc))arr.splice(i,1);else arr[i]=wc;}
+      });
+    }
+  }
+});
 {
   const known=new Set([...store.myGlazes.map(g=>g.name)]);
   const promote=nm=>{if(typeof nm==='string'&&nm&&!known.has(nm)){
@@ -281,7 +299,7 @@ async function pullStore(){
     const g=await gh('/gists/'+id);
     const remote=JSON.parse(g.files[FNAME].content);
     if((remote._ts||0)>(store._ts||0)){
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]},remote);
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[],glazeMy:{}},remote);
       try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
       render();
     }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
@@ -314,8 +332,29 @@ function mineToSpec(m){
     rev:null, mine:true, memo:m.memo||'', photos:m.photos, main:m.main};
 }
 function mergeMine(){
-  for(let i=SP.length-1;i>=0;i--)if(SP[i].mine)SP.splice(i,1);
-  (store.mine||[]).forEach(m=>SP.push(mineToSpec(m)));
+  for(let i=SP.length-1;i>=0;i--){
+    const s=SP[i];
+    if(s.mine){SP.splice(i,1);continue;}
+    if(s.my){
+      const b=BASE[s.code];
+      s.hex=b.hex;s.grp=b.grp;s.hue=b.hue;s.l=b.l;
+      delete s.my;delete s.main;
+    }
+  }
+  (store.mine||[]).forEach(m=>{
+    const wc=m.uNo!=null&&m.oNo!=null?m.uNo+'-'+m.oNo:null;
+    const ws=wc&&WALL.has(wc)?SP.find(x=>x.code===wc):null;
+    if(ws){
+      ws.my=m;
+      if(m.photos.length&&m.main!=='ref'){
+        ws.hex=m.hex;ws.grp=m.grp;
+        const {h,l}=hexHL(m.hex);ws.hue=h;ws.l=l;
+        ws.main=m.main;
+      }
+    }else{
+      SP.push(mineToSpec(m));
+    }
+  });
 }
 const PHOTO_MARK='glaze-db-photos.marker';
 let photoGistId=localStorage.getItem('glazedb:photogist')||'';
@@ -372,6 +411,7 @@ async function ensurePhotos(){
   const pids=[];
   (store.mine||[]).forEach(m=>pids.push(...(m.photos||[m.id])));
   (store.works||[]).forEach(w=>pids.push(...(w.photos||[])));
+  Object.values(store.glazeMy||{}).forEach(g=>pids.push(...(g.photos||[])));
   for(const pid of pids){
     if(photoCache[pid])continue;
     const b=await idb.get(pid);
@@ -429,7 +469,7 @@ function filtered(){
   if(F.grps.size)xs=xs.filter(s=>F.grps.has(s.grp));
   if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
   if(F.make)xs=xs.filter(makeable);
-  if(F.mine)xs=xs.filter(s=>s.mine);
+  if(F.mine)xs=xs.filter(s=>s.mine||(s.my&&s.my.photos&&s.my.photos.length));
   if(F.star)xs=xs.filter(s=>(store.stars[s.code]||0)>=F.star);
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
   const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
@@ -440,11 +480,12 @@ function filtered(){
 /* ---------- render: gallery ---------- */
 function cardHTML(s){
   const st=store.stars[s.code];
-  const img=s.mine?(photoCache[s.main]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
-  const pid=s.mine?` data-pid="${s.main}"`:'';
+  const myMain=s.mine?s.main:(s.my&&s.my.photos.length&&s.my.main!=='ref'?s.my.main:null);
+  const img=myMain?(photoCache[myMain]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
+  const pid=myMain?` data-pid="${myMain}"`:'';
   return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.disp||s.code}">
     <img src="${img}"${pid} alt="" loading="lazy">
-    ${s.mine?'<span class="minebadge">내 시편</span>':''}
+    ${s.mine?'<span class="minebadge">내 시편</span>':(s.my&&s.my.photos.length?'<span class="minebadge">내 소성</span>':'')}
     ${st?`<span class="star">${'★'.repeat(st)}</span>`:''}
     <span class="sticker">${s.disp||s.code}</span></button>`;
 }
@@ -555,7 +596,11 @@ function workMiniCards(ws,title){
 function glazeName(part){return typeof part==='number'?(GMAP[part]?GMAP[part].name:part):part;}
 function glazeDot(part){
   let hx='#CCC';
-  if(typeof part==='number'){const g=GMAP[part];if(g&&g.hex)hx=g.hex;}
+  if(typeof part==='number'){
+    const gm=(store.glazeMy||{})[part];
+    if(gm&&gm.main&&gm.main!=='ref'&&gm.hex)hx=gm.hex;
+    else{const g=GMAP[part];if(g&&g.hex)hx=g.hex;}
+  }
   else if(part){const g=myGlaze(part);if(g&&g.hex)hx=g.hex;}
   return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${hx};margin-right:5px;vertical-align:-1px"></span>`;
 }
@@ -800,6 +845,7 @@ async function submitAdd(){
       store.mine.push({id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
         memo,ts:Date.now(),photos:[pid],main:pid});
       save();specDraft=null;closeSheet();
+      if(WALL.has(disp))alert(disp+' 카드에 내 사진으로 추가됐어요. 중앙도재 사진은 참조로 남아 있어요.');
     }
   }catch(e){st.textContent='실패: '+e.message;}
 }
@@ -934,22 +980,53 @@ function openGlazeSelector(selected,onDone,onCancel,opts){
   $('#pickOk').onclick=()=>onDone(sel);
   $('#pickCancel').onclick=onCancel;
 }
-function openSheet(code){
+function ensureEntry(s){
+  let e=(store.mine||[]).find(m=>m.uNo===s.u&&m.oNo===s.o&&m.uNo!=null&&m.oNo!=null);
+  if(!e){
+    e={id:newId(),disp:s.code,uNo:s.u,oNo:s.o,
+       uName:GMAP[s.u]?GMAP[s.u].name:'',oName:GMAP[s.o]?GMAP[s.o].name:'',
+       hex:s.hex,grp:s.grp,memo:'',ts:Date.now(),photos:[],main:'ref'};
+    store.mine=store.mine||[];store.mine.push(e);
+  }
+  return e;
+}
+function wallThumbs(s,entry,viewPid){
+  const my=(entry&&entry.photos||[]);
+  const mainPid=entry?entry.main:'ref';
+  const t=[`<img src="crops/${s.file}" data-thumb="ref"
+    class="${viewPid==='ref'?'cur':''}${mainPid==='ref'?' mainmark':''}" alt="참조">`];
+  my.forEach(p=>t.push(`<img src="${photoCache[p]||''}" data-pid="${p}" data-thumb="${p}"
+    class="${p===viewPid?'cur':''}${p===mainPid?' mainmark':''}" alt="">`));
+  t.push('<button class="thumbadd" data-act="addphoto">＋</button>');
+  return `<div class="thumbs">${t.join('')}</div>`;
+}
+function openWallSheet(code,viewPid){
   const s=SP.find(x=>x.code===code); if(!s)return;
-  if(s.mine)return openMineSheet(s);
-
-
+  const entry=s.my||null;
+  if(!viewPid)viewPid=entry?entry.main:'ref';
+  if(viewPid!=='ref'&&(!entry||!entry.photos.includes(viewPid)))viewPid=entry?entry.main:'ref';
   const mk=makeable(s), st=store.stars[code]||0;
   const tagNames=Object.keys(store.tags).sort();
+  const bigSrc=viewPid==='ref'?('crops/'+s.file):(photoCache[viewPid]||'');
+  const isMain=entry?entry.main===viewPid:viewPid==='ref';
+  const memoTxt=entry&&entry.memo?entry.memo:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode">${s.code}</span><span class="dfam">${(GRPS[s.grp]||{}).name||s.fam} · ${s.hex}</span></div>
-    <img class="dimg" src="crops/${s.file}" alt="시편 ${s.code}">
+    <div class="dhead"><span class="dcode">${s.code}</span><span class="dfam">${(GRPS[s.grp]||{}).name||''} · ${s.hex}</span></div>
+    <img class="dimg" src="${bigSrc}" ${viewPid!=='ref'?`data-pid="${viewPid}"`:''} alt="시편 ${s.code}">
+    ${wallThumbs(s,entry,viewPid)}
+    <div class="btnrow" style="justify-content:center">
+      ${!isMain?'<button class="btn" id="setMain">메인으로 지정</button>':''}
+      ${viewPid!=='ref'?'<button class="btn" id="delPhoto">이 사진 삭제</button>':''}
+    </div>
+    ${viewPid==='ref'?'<p style="text-align:center;font-size:11.5px;color:var(--sub);margin:2px 0 0">중앙도재 참조 사진</p>':''}
     <div class="stars" role="group" aria-label="별점">
       ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
     </div>
     <div class="recipe">${glazeRow('먼저 2회',s.u)}${glazeRow('위에 2회',s.o)}</div>
     <div class="makeline ${mk?'y':''}">${mk?'지금 공방 재고로 만들 수 있어요':'붓시유용 유약이 부족해요 — 설정에서 보유를 확인하세요'}</div>
     ${s.rev?`<button class="revchip" data-open="${s.rev}">순서 뒤집기 → <span class="rc">${s.rev}</span></button>`:''}
+    <div class="thd">메모 <button id="memoEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
+    <p id="memoView" style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${(memoTxt||'—').replace(/</g,'&lt;')}</p>
     ${workMiniCards(specWorks(s),'이 조합의 두 유약을 쓴 작품')}
     <div class="thd">태그</div>
     <div class="tagwrap">${tagNames.map(t=>{
@@ -959,8 +1036,60 @@ function openSheet(code){
   $('#sheet').dataset.code=code;
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
+  const reopen=p=>{mergeMine();openWallSheet(code,p);};
+  $$('#sheet [data-thumb]').forEach(t=>t.onclick=()=>reopen(t.dataset.thumb));
+  const set=$('#setMain');
+  if(set)set.onclick=async()=>{
+    const e=ensureEntry(s);
+    e.main=viewPid;
+    if(viewPid==='ref'){e.hex=BASE[code].hex;e.grp=BASE[code].grp;}
+    else await recomputeFromMain(e);
+    if(e.main==='ref'&&!e.photos.length&&!e.memo)store.mine=store.mine.filter(m=>m.id!==e.id);
+    save();reopen(viewPid);
+  };
+  const del=$('#delPhoto');
+  if(del)del.onclick=async()=>{
+    if(!entry)return;
+    if(!confirm('이 사진을 삭제할까요?'))return;
+    entry.photos=entry.photos.filter(p=>p!==viewPid);
+    removePhoto(viewPid);
+    if(entry.main===viewPid){
+      entry.main=entry.photos[0]||'ref';
+      if(entry.main==='ref'){entry.hex=BASE[code].hex;entry.grp=BASE[code].grp;}
+      else await recomputeFromMain(entry);
+    }
+    if(!entry.photos.length&&!entry.memo&&entry.main==='ref')
+      store.mine=store.mine.filter(m=>m.id!==entry.id);
+    save();reopen('ref');
+  };
+  const add=$('#sheet [data-act="addphoto"]');
+  if(add)add.onclick=()=>openCropPick(async b64=>{
+    const e=ensureEntry(s);
+    const pid=newId();
+    await idb.put(pid,b64);photoCache[pid]=b64url(b64);
+    if(getToken())pushPhoto(pid,b64).catch(()=>{});
+    e.photos.push(pid);e.main=pid;
+    await recomputeFromMain(e);
+    save();reopen(pid);
+  },()=>reopen(viewPid));
+  const me=$('#memoEdit');
+  if(me)me.onclick=()=>{
+    const e=ensureEntry(s);
+    $('#memoView').outerHTML=`<textarea id="memoBox" style="width:100%;height:70px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:13.5px">${e.memo||''}</textarea>
+      <div class="btnrow" style="margin-top:6px"><button class="btn" id="memoSave">메모 저장</button></div>`;
+    $('#memoSave').onclick=()=>{
+      e.memo=$('#memoBox').value.trim();
+      if(!e.memo&&!e.photos.length&&e.main==='ref')store.mine=store.mine.filter(m=>m.id!==e.id);
+      save();reopen(viewPid);
+    };
+  };
   $$('#sheet [data-work]').forEach(b=>b.onclick=()=>openWorkSheet(b.dataset.work));
   ensurePhotos();
+}
+function openSheet(code){
+  const s=SP.find(x=>x.code===code); if(!s)return;
+  if(s.mine)return openMineSheet(s);
+  return openWallSheet(code);
 }
 function closeSheet(){$('#scrim').classList.remove('open');$('#sheet').classList.remove('open');
   document.body.style.overflow='';render();}
@@ -1002,7 +1131,10 @@ function renderGlazeList(){
   }).join('');
   $('#glazeView').innerHTML='<div class="glist">'+GL.map(g=>{
     const n=SP.filter(s=>s.u===g.no||s.o===g.no).length;
-    const img=g.file?`<img src="singles/${g.file}" alt="">`:'<span class="ph">사진 없음</span>';
+    const gm=(store.glazeMy||{})[g.no];
+    const myImg=gm&&gm.main&&gm.main!=='ref'&&photoCache[gm.main];
+    const img=myImg?`<img src="${photoCache[gm.main]}" data-pid="${gm.main}" alt="">`
+      :(g.file?`<img src="singles/${g.file}" alt="">`:'<span class="ph">사진 없음</span>');
     return `<button class="gcard" data-g="${g.no}">${img}
       <span><span class="no">${g.no}</span> <span class="nm">${g.name}</span>
       <div class="own">${ownText(g.no)} · 조합 ${n}개</div></span></button>`;
@@ -1088,21 +1220,57 @@ function openGlazeAdd(){
 }
 function renderGlazeDetail(no){
   glazeDetail=no; const g=GMAP[no];
+  const gm=(store.glazeMy||{})[no]||null;
   const under=SP.filter(s=>s.u===no), over=SP.filter(s=>s.o===no);
   const grid=xs=>'<div class="grid">'+[...xs].sort((a,b)=>a.grp-b.grp||b.l-a.l).map(cardHTML).join('')+'</div>';
+  const mainPid=gm?gm.main:'ref';
+  const bigSrc=mainPid==='ref'?(g.file?'singles/'+g.file:null):(photoCache[mainPid]||'');
+  const thumbs=[];
+  if(g.file)thumbs.push(`<img src="singles/${g.file}" data-gth="ref" class="${mainPid==='ref'?'mainmark cur':''}" alt="참조">`);
+  (gm&&gm.photos||[]).forEach(p=>thumbs.push(
+    `<img src="${photoCache[p]||''}" data-pid="${p}" data-gth="${p}" class="${p===mainPid?'mainmark cur':''}" alt="">`));
+  thumbs.push('<button class="thumbadd" id="gAddPhoto">＋</button>');
   $('#glazeView').innerHTML=`
     <div class="backbar"><button id="gBack">← 유약 전체</button>
       <span class="nm" style="font-weight:800">${g.no} ${g.name}</span>
       <span style="font-size:12px;color:var(--sub)">${ownText(no)}</span></div>
-    ${g.file?`<img src="singles/${g.file}" alt="${g.name} 단일 시유" style="width:150px;border-radius:12px;border:1px solid var(--line)">`:''}
+    ${bigSrc?`<img src="${bigSrc}" ${mainPid!=='ref'?`data-pid="${mainPid}"`:''} alt="${g.name}" style="width:150px;border-radius:12px;border:1px solid var(--line)">`:''}
+    <div class="thumbs" style="justify-content:flex-start">${thumbs.join('')}</div>
     ${workMiniCards(glazeWorks(no),'이 유약을 쓴 작품')}
     <div class="gsec">밑유약으로 쓴 조합 <b>${under.length}</b></div>${under.length?grid(under):'<div class="empty">없음</div>'}
     <div class="gsec">윗유약으로 쓴 조합 <b>${over.length}</b></div>${over.length?grid(over):'<div class="empty">없음</div>'}`;
+  const ensureGM=()=>{store.glazeMy[no]=store.glazeMy[no]||{photos:[],main:'ref',hex:null};return store.glazeMy[no];};
+  const recomputeGM=async e=>{
+    const b64=await idb.get(e.main); if(!b64)return;
+    await new Promise(res=>{const im=new Image();
+      im.onload=()=>{const cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;
+        cv.getContext('2d').drawImage(im,0,0);e.hex=canvasHex(cv);res();};
+      im.onerror=res;im.src='data:image/jpeg;base64,'+b64;});
+  };
+  $$('#glazeView [data-gth]').forEach(t=>t.onclick=async()=>{
+    const pid=t.dataset.gth;
+    const e=ensureGM();
+    if(pid===String(e.main))return;
+    if(pid==='ref'){e.main='ref';e.hex=null;
+      if(!e.photos.length)delete store.glazeMy[no];
+    }else if(e.photos.includes(pid)){
+      e.main=pid;await recomputeGM(e);
+    }
+    save();renderGlazeDetail(no);
+  });
+  $('#gAddPhoto').onclick=()=>{
+    $('#scrim').classList.add('open');
+    openCropPick(async b64=>{
+      const e=ensureGM();
+      const pid=newId();
+      await idb.put(pid,b64);photoCache[pid]=b64url(b64);
+      if(getToken())pushPhoto(pid,b64).catch(()=>{});
+      e.photos.push(pid);e.main=pid;await recomputeGM(e);
+      save();closeSheet();renderGlazeDetail(no);
+    },()=>{closeSheet();renderGlazeDetail(no);});
+  };
   ensurePhotos();
 }
-$('#workView').addEventListener('click',e=>{
-  const c=e.target.closest('[data-work]'); if(c)openWorkSheet(c.dataset.work);
-});
 $('#glazeView').addEventListener('click',e=>{
   const wk=e.target.closest('[data-work]'); if(wk)return openWorkSheet(wk.dataset.work);
   if(e.target.id==='gBack')return renderGlazeList();
@@ -1157,10 +1325,10 @@ $('#setView').addEventListener('click',e=>{
     localStorage.removeItem(TKEY);localStorage.removeItem(GKEY);renderSettings();return;}
   if(e.target.id==='ioImport'){try{
       const v=JSON.parse($('#ioBox').value);
-      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]},v);save();renderSettings();alert('가져왔어요.');
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[],glazeMy:{}},v);save();renderSettings();alert('가져왔어요.');
     }catch(err){alert('형식이 올바르지 않아요. 내보내기 내용을 그대로 붙여넣어 주세요.');}}
   if(e.target.id==='ioReset'&&confirm('보유·별점·태그를 모두 지울까요?')){
-    store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[]};save();renderSettings();}
+    store={owned:{},stars:{},tags:{},mine:[],works:[],myGlazes:[],glazeMy:{}};save();renderSettings();}
 });
 
 /* ---------- tabs ---------- */
