@@ -66,6 +66,15 @@ main{max-width:1080px;margin:0 auto;padding:4px 16px 80px}
 .card img{width:100%;aspect-ratio:116/132;object-fit:cover}
 .sticker{display:inline-block;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:3px;padding:1px 7px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.02em}
 .card .star{position:absolute;top:5px;right:6px;font-size:12px;color:#E0A422;text-shadow:0 0 3px #fff}
+.minebadge{position:absolute;top:5px;left:6px;font-size:10px;background:var(--accent);color:#fff;border-radius:3px;padding:1px 5px;font-weight:700}
+.fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:30;width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:26px;box-shadow:0 6px 18px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center}
+.cropbox{width:232px;height:264px;margin:10px auto;border-radius:10px;overflow:hidden;position:relative;background:#EEE;border:1px solid var(--line);touch-action:none}
+.cropbox img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none}
+.formrow{margin:12px 0}
+.formrow label{display:block;font-size:12.5px;font-weight:700;color:var(--sub);margin-bottom:5px}
+.formrow select,.formrow input[type=text],.formrow textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;background:var(--card)}
+.formrow textarea{height:64px;resize:vertical}
+.zoom{width:232px;display:block;margin:6px auto}
 .card .nomake{position:absolute;top:5px;left:6px;font-size:10px;background:rgba(255,255,255,.85);border-radius:3px;padding:1px 4px;color:var(--sub)}
 .empty{padding:56px 12px;text-align:center;color:var(--sub)}
 .empty b{color:var(--ink)}
@@ -153,7 +162,13 @@ textarea.io{width:100%;height:90px;border:1px solid var(--line);border-radius:8p
   <div class="ctrl">
     <select class="chip" id="glazeSel"></select>
     <button class="chip" id="makeBtn" aria-pressed="false">지금 만들 수 있는 것</button>
-    <button class="chip" id="starBtn" aria-pressed="false">★ 즐겨찾기</button>
+    <button class="chip" id="mineBtn" aria-pressed="false">내 시편</button>
+    <select class="chip" id="starSel">
+      <option value="0">별점 전체</option>
+      <option value="1">★ 이상</option>
+      <option value="2">★★ 이상</option>
+      <option value="3">★★★만</option>
+    </select>
     <select class="chip" id="tagSel"><option value="">태그 전체</option></select>
     <select class="chip" id="sortSel">
       <option value="hue">색 그룹순</option>
@@ -184,11 +199,11 @@ const FAMS=(window.DATA&&window.DATA.fams)||['백·미색','베이지','연갈',
 
 /* ---------- persistent state ---------- */
 const LSKEY='glazedb:v1';
-let store={owned:{},stars:{},tags:{}};
+let store={owned:{},stars:{},tags:{},mine:[]};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
 const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
 const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
-const makeable=s=>ownedBrush(s.u)&&ownedBrush(s.o);
+const makeable=s=>s.u!=null&&s.o!=null&&ownedBrush(s.u)&&ownedBrush(s.o);
 
 
 /* ---------- gist sync ---------- */
@@ -230,17 +245,119 @@ async function pullStore(){
     const g=await gh('/gists/'+id);
     const remote=JSON.parse(g.files[FNAME].content);
     if((remote._ts||0)>(store._ts||0)){
-      store=Object.assign({owned:{},stars:{},tags:{}},remote);
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},remote);
       try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){}
       render();
     }else if((store._ts||0)>(remote._ts||0)){await pushStore();}
     setSyncState('동기화됨 · '+new Date().toLocaleTimeString());
   }catch(e){setSyncState('동기화 실패: '+e.message);}
 }
+
+/* ---------- my specimens (private, gist-synced) ---------- */
+function hexHL(hex){
+  const r=parseInt(hex.substr(1,2),16)/255,g=parseInt(hex.substr(3,2),16)/255,b=parseInt(hex.substr(5,2),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;let h=0,s=0;
+  if(mx!==mn){const dd=mx-mn;s=l>0.5?dd/(2-mx-mn):dd/(mx+mn);
+    h=mx===r?((g-b)/dd+(g<b?6:0)):mx===g?((b-r)/dd+2):((r-g)/dd+4);h*=60;}
+  return {h,s,l};
+}
+function assignGrp(hex){
+  const {h,s,l}=hexHL(hex), a=h*Math.PI/180;
+  const fx=s*Math.cos(a), fy=s*Math.sin(a), w=window.DATA.gw||0.35;
+  let bi=0,bd=1e9;
+  GRPS.forEach((g,i)=>{if(!g.center)return;
+    const dd=(fx-g.center[0])**2+(fy-g.center[1])**2+(w*(l-g.center[2]))**2;
+    if(dd<bd){bd=dd;bi=i;}});
+  return bi;
+}
+function mineToSpec(m){
+  const {h,l}=hexHL(m.hex);
+  return {code:'u:'+m.id, id:m.id, disp:m.disp, u:m.uNo, o:m.oNo,
+    uName:m.uName, oName:m.oName, hex:m.hex,
+    grp:m.grp!=null?m.grp:assignGrp(m.hex), hue:h, l:l,
+    rev:null, mine:true, memo:m.memo||''};
+}
+function mergeMine(){
+  for(let i=SP.length-1;i>=0;i--)if(SP[i].mine)SP.splice(i,1);
+  (store.mine||[]).forEach(m=>SP.push(mineToSpec(m)));
+}
+const PHOTO_MARK='glaze-db-photos.marker';
+let photoGistId=localStorage.getItem('glazedb:photogist')||'';
+const photoCache={};
+const idb={
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('glazedb',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('photos');
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});},
+  async get(id){const db=await this.open();return new Promise(res=>{
+    const t=db.transaction('photos').objectStore('photos').get(id);
+    t.onsuccess=()=>res(t.result||null);t.onerror=()=>res(null);});},
+  async put(id,b64){const db=await this.open();return new Promise(res=>{
+    const t=db.transaction('photos','readwrite');t.objectStore('photos').put(b64,id);
+    t.oncomplete=res;t.onerror=res;});},
+  async del(id){const db=await this.open();return new Promise(res=>{
+    const t=db.transaction('photos','readwrite');t.objectStore('photos').delete(id);
+    t.oncomplete=res;t.onerror=res;});}
+};
+function b64url(b64){
+  const bin=atob(b64),arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([arr],{type:'image/jpeg'}));
+}
+async function findPhotoGist(create){
+  if(photoGistId){try{await gh('/gists/'+photoGistId);return photoGistId;}
+    catch(e){photoGistId='';localStorage.removeItem('glazedb:photogist');}}
+  const list=await gh('/gists?per_page=100');
+  const hit=list.find(g=>g.files&&g.files[PHOTO_MARK]);
+  if(hit)photoGistId=hit.id;
+  else if(create){
+    const made=await gh('/gists',{method:'POST',body:JSON.stringify({
+      description:'Glaze DB photos',public:false,
+      files:{[PHOTO_MARK]:{content:'glaze-db'}}})});
+    photoGistId=made.id;
+  }else return null;
+  localStorage.setItem('glazedb:photogist',photoGistId);
+  return photoGistId;
+}
+async function pushPhoto(id,b64){
+  const gid=await findPhotoGist(true);
+  await gh('/gists/'+gid,{method:'PATCH',body:JSON.stringify({
+    files:{['p-'+id+'.b64']:{content:b64}}})});
+}
+async function removePhoto(id){
+  try{const gid=await findPhotoGist(false);
+    if(gid)await gh('/gists/'+gid,{method:'PATCH',body:JSON.stringify({
+      files:{['p-'+id+'.b64']:null}})});}catch(e){}
+  idb.del(id);
+  if(photoCache[id]){URL.revokeObjectURL(photoCache[id]);delete photoCache[id];}
+}
+let photosFetching=false;
+async function ensurePhotos(){
+  const need=[];
+  for(const m of (store.mine||[])){
+    if(photoCache[m.id])continue;
+    const b=await idb.get(m.id);
+    if(b){photoCache[m.id]=b64url(b);continue;}
+    need.push(m.id);
+  }
+  if(need.length&&getToken()&&!photosFetching){
+    photosFetching=true;
+    try{const gid=await findPhotoGist(false);
+      if(gid){const g=await gh('/gists/'+gid);
+        for(const id of need){
+          const f=g.files['p-'+id+'.b64'];
+          if(f&&f.content){await idb.put(id,f.content);photoCache[id]=b64url(f.content);}
+        }}}catch(e){}
+    photosFetching=false;
+  }
+  $$('img[data-pid]').forEach(im=>{
+    const u=photoCache[im.dataset.pid]; if(u&&im.getAttribute('src')!==u)im.src=u;
+  });
+}
+
 if(getToken())pullStore();
 
 /* ---------- filter state ---------- */
-const F={grps:new Set(),glaze:'',make:false,star:false,tag:'',sort:'hue'};
+const F={grps:new Set(),glaze:'',make:false,mine:false,star:0,tag:'',sort:'hue'};
 let curTab='spec', glazeDetail=null;
 
 /* ---------- group chips ---------- */
@@ -257,7 +374,8 @@ GRPS.forEach((g,gi)=>{
 $('#glazeSel').innerHTML='<option value="">유약 전체</option>'+GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('');
 $('#glazeSel').onchange=e=>{F.glaze=e.target.value;render()};
 $('#makeBtn').onclick=()=>{F.make=!F.make;$('#makeBtn').setAttribute('aria-pressed',F.make);render()};
-$('#starBtn').onclick=()=>{F.star=!F.star;$('#starBtn').setAttribute('aria-pressed',F.star);render()};
+$('#mineBtn').onclick=()=>{F.mine=!F.mine;$('#mineBtn').setAttribute('aria-pressed',F.mine);render()};
+$('#starSel').onchange=e=>{F.star=+e.target.value;render()};
 $('#tagSel').onchange=e=>{F.tag=e.target.value;render()};
 $('#sortSel').onchange=e=>{F.sort=e.target.value;render()};
 function refreshTagSel(){
@@ -272,7 +390,8 @@ function filtered(){
   if(F.grps.size)xs=xs.filter(s=>F.grps.has(s.grp));
   if(F.glaze){const g=+F.glaze; xs=xs.filter(s=>s.u===g||s.o===g);}
   if(F.make)xs=xs.filter(makeable);
-  if(F.star)xs=xs.filter(s=>store.stars[s.code]);
+  if(F.mine)xs=xs.filter(s=>s.mine);
+  if(F.star)xs=xs.filter(s=>(store.stars[s.code]||0)>=F.star);
   if(F.tag)xs=xs.filter(s=>(store.tags[F.tag]||[]).includes(s.code));
   const by={hue:(a,b)=>a.grp-b.grp||b.l-a.l, light:(a,b)=>b.l-a.l, dark:(a,b)=>a.l-b.l,
     code:(a,b)=>a.u-b.u||a.o-b.o};
@@ -282,13 +401,18 @@ function filtered(){
 /* ---------- render: gallery ---------- */
 function cardHTML(s){
   const st=store.stars[s.code];
-  return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.code}">
-    <img src="crops/${s.file}" alt="" loading="lazy">
+  const img=s.mine?(photoCache[s.id]||'data:image/gif;base64,R0lGODlhAQABAAAAACw='):'crops/'+s.file;
+  const pid=s.mine?` data-pid="${s.id}"`:'';
+  return `<button class="card" data-code="${s.code}" aria-label="시편 ${s.disp||s.code}">
+    <img src="${img}"${pid} alt="" loading="lazy">
+    ${s.mine?'<span class="minebadge">내 시편</span>':''}
     ${st?`<span class="star">${'★'.repeat(st)}</span>`:''}
-    <span class="sticker">${s.code}</span></button>`;
+    <span class="sticker">${s.disp||s.code}</span></button>`;
 }
 function render(){
+  mergeMine();
   refreshTagSel();
+  ensurePhotos();
   if(curTab!=='spec')return renderTab();
   const xs=filtered();
   if(F.sort==='hue'&&GRPS.length){
@@ -319,8 +443,140 @@ function glazeRow(role,no){
     <span><span class="gname">${g.name}</span> <span class="gno">${no}</span></span>
     <span class="ownb ${ob?'y':''}">${ob?'붓 보유':'붓 미보유'}</span></div>`;
 }
+function glazeRowCustom(role,name){
+  return `<div class="rrow"><span class="ph"></span><span class="role">${role}</span>
+    <span><span class="gname">${name}</span> <span class="gno">직접 입력</span></span></div>`;
+}
+function openMineSheet(s){
+  const st=store.stars[s.code]||0;
+  const tagNames=Object.keys(store.tags).sort();
+  const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
+  const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
+    <img class="dimg" src="${photoCache[s.id]||''}" data-pid="${s.id}" alt="내 시편 ${s.disp}">
+    <div class="stars" role="group" aria-label="별점">
+      ${[1,2,3].map(n=>`<button data-star="${n}" class="${st>=n?'on':''}" aria-label="${n}점">★</button>`).join('')}
+    </div>
+    <div class="recipe">${r1}${r2}</div>
+    ${s.memo?`<div class="thd">메모</div><p style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${s.memo.replace(/</g,'&lt;')}</p>`:''}
+    <div class="thd">태그</div>
+    <div class="tagwrap">${tagNames.map(t=>{
+      const on=(store.tags[t]||[]).includes(s.code);
+      return `<button class="tag ${on?'on':''}" data-tag="${t}">${t}</button>`;}).join('')||'<span style="color:var(--sub);font-size:13px">아직 태그가 없어요</span>'}</div>
+    <div class="tagadd"><input id="newTag" placeholder="새 태그 이름" maxlength="20"><button class="btn" id="addTag">추가</button></div>
+    ${getToken()?'<div class="btnrow" style="margin-top:18px"><button class="btn warn" id="mineDel" data-id="'+s.id+'">이 시편 삭제</button></div>':''}`;
+  $('#sheet').dataset.code=s.code;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+let crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
+function glazeOptions(){
+  return '<option value="">선택</option>'
+    +GL.map(g=>`<option value="${g.no}">${g.no} ${g.name}</option>`).join('')
+    +'<option value="etc">기타 (직접 입력)</option>';
+}
+function openAddSheet(){
+  if(!getToken()){
+    alert('시편 등록은 내 기기 전용 기능이라, 설정 탭에서 동기화 토큰을 먼저 연결해주세요.');
+    curTab='set';$$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab==='set'));renderTab();return;
+  }
+  crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0};
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">시편 추가</span></div>
+    <div class="formrow"><label>사진</label>
+      <input type="file" id="addPhoto" accept="image/*" capture="environment"></div>
+    <div class="cropbox" id="cropbox"><img id="cropimg" alt="" hidden></div>
+    <input type="range" class="zoom" id="cropzoom" min="1" max="3.5" step="0.01" value="1" hidden>
+    <div class="formrow"><label>밑유약 (먼저 시유)</label>
+      <select id="addU">${glazeOptions()}</select>
+      <input type="text" id="addUx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
+    <div class="formrow"><label>윗유약 (나중 시유)</label>
+      <select id="addO">${glazeOptions()}</select>
+      <input type="text" id="addOx" placeholder="유약 이름 직접 입력" hidden style="margin-top:6px"></div>
+    <div class="formrow"><label>메모 (소성 조건 등)</label><textarea id="addMemo"></textarea></div>
+    <div class="btnrow"><button class="btn" id="addSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button>
+    <span id="addState" style="font-size:12.5px;color:var(--sub);align-self:center"></span></div>`;
+  $('#scrim').classList.add('open');$('#sheet').classList.add('open');
+  document.body.style.overflow='hidden';
+  wireAddForm();
+}
+function wireAddForm(){
+  const box=$('#cropbox'), im=$('#cropimg'), zoom=$('#cropzoom');
+  function apply(){
+    const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
+    const minx=232-crop.iw*s, miny=264-crop.ih*s;
+    crop.tx=Math.min(0,Math.max(minx,crop.tx));
+    crop.ty=Math.min(0,Math.max(miny,crop.ty));
+    im.style.transform=`translate(${crop.tx}px,${crop.ty}px) scale(${s})`;
+  }
+  $('#addPhoto').onchange=e=>{
+    const f=e.target.files[0]; if(!f)return;
+    const url=URL.createObjectURL(f);
+    im.onload=()=>{crop.iw=im.naturalWidth;crop.ih=im.naturalHeight;
+      crop.z=1;const s0=Math.max(232/crop.iw,264/crop.ih);
+      crop.tx=(232-crop.iw*s0)/2;crop.ty=(264-crop.ih*s0)/2;
+      im.hidden=false;zoom.hidden=false;crop.img=im;apply();};
+    im.src=url;
+  };
+  zoom.oninput=()=>{crop.z=+zoom.value;apply();};
+  let drag=null;
+  box.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};box.setPointerCapture(e.pointerId);});
+  box.addEventListener('pointermove',e=>{if(!drag)return;
+    crop.tx+=e.clientX-drag.x;crop.ty+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};apply();});
+  box.addEventListener('pointerup',()=>drag=null);
+  const wire=(sel,tx)=>{$(sel).onchange=e=>{$(tx).hidden=e.target.value!=='etc';};};
+  wire('#addU','#addUx');wire('#addO','#addOx');
+  $('#addSubmit').onclick=submitAdd;
+}
+function cropToCanvas(){
+  const cv=document.createElement('canvas');cv.width=464;cv.height=528;
+  const ctx=cv.getContext('2d');
+  const s0=Math.max(232/crop.iw,264/crop.ih), s=s0*crop.z;
+  ctx.scale(2,2);ctx.translate(crop.tx,crop.ty);ctx.scale(s,s);
+  ctx.drawImage(crop.img,0,0);
+  return cv;
+}
+function canvasHex(cv){
+  const ctx=cv.getContext('2d');
+  const d=ctx.getImageData(cv.width*0.3,cv.height*0.28,cv.width*0.4,cv.height*0.34).data;
+  let r=0,g=0,b=0,n=d.length/4;
+  for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
+  const hx=v=>Math.round(v/n).toString(16).padStart(2,'0').toUpperCase();
+  return '#'+hx(r)+hx(g)+hx(b);
+}
+async function submitAdd(){
+  const uv=$('#addU').value, ov=$('#addO').value;
+  const uName=uv==='etc'?$('#addUx').value.trim():uv?GMAP[+uv].name:'';
+  const oName=ov==='etc'?$('#addOx').value.trim():ov?GMAP[+ov].name:'';
+  if(!crop.img){alert('사진을 선택해주세요.');return;}
+  if(!uName||!oName){alert('밑유약과 윗유약을 선택하거나 입력해주세요.');return;}
+  const st=$('#addState');st.textContent='등록 중…';
+  try{
+    const cv=cropToCanvas(), hex=canvasHex(cv);
+    const b64=cv.toDataURL('image/jpeg',0.88).split(',')[1];
+    const id=Date.now().toString(36);
+    const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
+    const disp=(uNo??uName)+'-'+(oNo??oName);
+    const entry={id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
+      memo:$('#addMemo').value.trim(),ts:Date.now()};
+    await idb.put(id,b64);
+    photoCache[id]=b64url(b64);
+    store.mine=store.mine||[];store.mine.push(entry);save();
+    pushPhoto(id,b64).catch(e=>alert('사진 동기화 실패(이 기기엔 저장됨): '+e.message));
+    closeSheet();
+  }catch(e){st.textContent='실패: '+e.message;}
+}
+async function deleteMine(id){
+  if(!confirm('이 시편을 삭제할까요?'))return;
+  store.mine=(store.mine||[]).filter(m=>m.id!==id);save();
+  removePhoto(id);
+  closeSheet();
+}
 function openSheet(code){
   const s=SP.find(x=>x.code===code); if(!s)return;
+  if(s.mine)return openMineSheet(s);
+
   const mk=makeable(s), st=store.stars[code]||0;
   const tagNames=Object.keys(store.tags).sort();
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -362,6 +618,7 @@ $('#sheet').addEventListener('click',e=>{
       save();openSheet(code);}return;}
   const rv=e.target.closest('[data-open]');
   if(rv){openSheet(rv.dataset.open);return;}
+  if(e.target.id==='mineDel'){deleteMine(e.target.dataset.id);return;}
 });
 
 /* ---------- glaze tab ---------- */
@@ -434,10 +691,10 @@ $('#setView').addEventListener('click',e=>{
     localStorage.removeItem(TKEY);localStorage.removeItem(GKEY);renderSettings();return;}
   if(e.target.id==='ioImport'){try{
       const v=JSON.parse($('#ioBox').value);
-      store=Object.assign({owned:{},stars:{},tags:{}},v);save();renderSettings();alert('가져왔어요.');
+      store=Object.assign({owned:{},stars:{},tags:{},mine:[]},v);save();renderSettings();alert('가져왔어요.');
     }catch(err){alert('형식이 올바르지 않아요. 내보내기 내용을 그대로 붙여넣어 주세요.');}}
   if(e.target.id==='ioReset'&&confirm('보유·별점·태그를 모두 지울까요?')){
-    store={owned:{},stars:{},tags:{}};save();renderSettings();}
+    store={owned:{},stars:{},tags:{},mine:[]};save();renderSettings();}
 });
 
 /* ---------- tabs ---------- */
@@ -456,6 +713,8 @@ $$('nav.tabs button').forEach(b=>b.onclick=()=>{
   renderTab();
 });
 
+const fab=document.createElement('button');fab.className='fab';fab.textContent='+';
+fab.setAttribute('aria-label','시편 추가');fab.onclick=openAddSheet;document.body.appendChild(fab);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 (function(){
   const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
