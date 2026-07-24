@@ -890,6 +890,7 @@ function renderGlazeDetail(no){
     ${workMiniCards(glazeWorks(no),'이 유약을 쓴 작품')}
     <div class="gsec">밑유약으로 쓴 조합 <b>${under.length}</b></div>${under.length?grid(under):'<div class="empty">없음</div>'}
     <div class="gsec">윗유약으로 쓴 조합 <b>${over.length}</b></div>${over.length?grid(over):'<div class="empty">없음</div>'}`;
+  ensurePhotos();
 }
 $('#workView').addEventListener('click',e=>{
   const c=e.target.closest('[data-work]'); if(c)openWorkSheet(c.dataset.work);
