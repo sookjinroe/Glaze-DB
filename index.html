@@ -688,13 +688,23 @@ async function submitAdd(){
     const id=newId(), pid=newId();
     const uNo=uv&&uv!=='etc'?+uv:null, oNo=ov&&ov!=='etc'?+ov:null;
     const disp=(uNo??uName)+'-'+(oNo??oName);
-    const entry={id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
-      memo:$('#addMemo').value.trim(),ts:Date.now(),photos:[pid],main:pid};
+    const memo=$('#addMemo').value.trim();
     await idb.put(pid,b64);
     photoCache[pid]=b64url(b64);
-    store.mine=store.mine||[];store.mine.push(entry);save();
     if(getToken())pushPhoto(pid,b64).catch(()=>{});
-    closeSheet();
+    store.mine=store.mine||[];
+    const dup=store.mine.find(m=>m.uNo===uNo&&m.oNo===oNo&&m.uName===uName&&m.oName===oName);
+    if(dup){
+      dup.photos.push(pid);dup.main=pid;
+      dup.hex=hex;dup.grp=assignGrp(hex);
+      if(memo)dup.memo=dup.memo?dup.memo+'\n'+memo:memo;
+      save();closeSheet();
+      alert('이미 있는 '+disp+' 시편에 사진으로 추가했어요. 새 사진이 메인이 됐고, 메인은 상세에서 바꿀 수 있어요.');
+    }else{
+      store.mine.push({id,disp,uNo,oNo,uName,oName,hex,grp:assignGrp(hex),
+        memo,ts:Date.now(),photos:[pid],main:pid});
+      save();closeSheet();
+    }
   }catch(e){st.textContent='실패: '+e.message;}
 }
 async function deleteMine(id){
