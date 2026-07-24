@@ -1236,6 +1236,7 @@ function renderGlazeDetail(no){
       <span style="font-size:12px;color:var(--sub)">${ownText(no)}</span></div>
     ${bigSrc?`<img src="${bigSrc}" ${mainPid!=='ref'?`data-pid="${mainPid}"`:''} alt="${g.name}" style="width:150px;border-radius:12px;border:1px solid var(--line)">`:''}
     <div class="thumbs" style="justify-content:flex-start">${thumbs.join('')}</div>
+    ${mainPid!=='ref'?'<div class="btnrow"><button class="btn" id="gDelPhoto">이 사진 삭제</button></div>':''}
     ${workMiniCards(glazeWorks(no),'이 유약을 쓴 작품')}
     <div class="gsec">밑유약으로 쓴 조합 <b>${under.length}</b></div>${under.length?grid(under):'<div class="empty">없음</div>'}
     <div class="gsec">윗유약으로 쓴 조합 <b>${over.length}</b></div>${over.length?grid(over):'<div class="empty">없음</div>'}`;
@@ -1258,6 +1259,17 @@ function renderGlazeDetail(no){
     }
     save();renderGlazeDetail(no);
   });
+  const gd=$('#gDelPhoto');
+  if(gd)gd.onclick=async()=>{
+    const e=ensureGM();
+    if(!confirm('이 사진을 삭제할까요?'))return;
+    const pid=e.main;
+    e.photos=e.photos.filter(p=>p!==pid);
+    removePhoto(pid);
+    if(e.photos.length){e.main=e.photos[e.photos.length-1];await recomputeGM(e);}
+    else{delete store.glazeMy[no];}
+    save();renderGlazeDetail(no);
+  };
   $('#gAddPhoto').onclick=()=>{
     $('#scrim').classList.add('open');
     openCropPick(async b64=>{
