@@ -614,26 +614,21 @@ function cropBH(){
 function cropUI(){
   return `<div class="ratios" id="cpRatios">${Object.entries(RATIOS).map(([k,r])=>
       `<button data-ratio="${k}" class="${k===crop.ratio?'on':''}">${r.label}</button>`).join('')}</div>
-    <div class="formrow" style="margin-top:4px"><label>사진 <span style="font-weight:400">— 색 추출을 위해 대상이 가운데 오게 해주세요</span></label>
+    <div class="formrow" style="margin-top:4px"><label>사진 <span style="font-weight:400">— 드래그로 위치, 두 손가락(휠)으로 확대 · 대상은 가운데로</span></label>
       <input type="file" id="cpFile" accept="image/*"></div>
-    <div class="cropbox" id="cpBox"><img id="cpImg" alt="" hidden></div>
-    <input type="range" class="zoom" id="cpZoom" min="1" max="3.5" step="0.01" value="1" hidden>`;
+    <div class="cropbox" id="cpBox"><img id="cpImg" alt="" hidden></div>`;
 }
 function wireCrop(){
-  const box=$('#cpBox'), im=$('#cpImg'), zoom=$('#cpZoom');
-  crop={img:crop.img,z:1,tx:0,ty:0,iw:crop.iw,ih:crop.ih,ratio:crop.ratio||'34'};
-  crop.img=null;crop.iw=0;crop.ih=0;
+  const box=$('#cpBox'), im=$('#cpImg');
+  crop={img:null,z:1,tx:0,ty:0,iw:0,ih:0,ratio:crop.ratio||'34'};
   function apply(){
     const BH=cropBH();
     box.style.height=BH+'px';
     if(!crop.img)return;
     if(crop.ratio==='or'){
-      const s=232/crop.iw;
-      im.style.transform=`translate(0px,0px) scale(${s})`;
-      zoom.hidden=true;
+      im.style.transform=`translate(0px,0px) scale(${232/crop.iw})`;
       return;
     }
-    zoom.hidden=false;
     const s0=Math.max(232/crop.iw,BH/crop.ih), s=s0*crop.z;
     const minx=232-crop.iw*s, miny=BH-crop.ih*s;
     crop.tx=Math.min(0,Math.max(minx,crop.tx));
@@ -647,6 +642,14 @@ function wireCrop(){
     crop.z=1;
     crop.tx=(232-crop.iw*s0)/2;crop.ty=(BH-crop.ih*s0)/2;
   }
+  function zoomAt(f,mx,my){
+    const BH=cropBH(), s0=Math.max(232/crop.iw,BH/crop.ih);
+    const z2=Math.min(5,Math.max(1,crop.z*f));
+    const k=(s0*z2)/(s0*crop.z);
+    crop.tx=mx-(mx-crop.tx)*k;
+    crop.ty=my-(my-crop.ty)*k;
+    crop.z=z2;apply();
+  }
   $$('#cpRatios [data-ratio]').forEach(b=>b.onclick=()=>{
     crop.ratio=b.dataset.ratio;
     $$('#cpRatios [data-ratio]').forEach(x=>x.classList.toggle('on',x===b));
@@ -659,12 +662,38 @@ function wireCrop(){
       im.hidden=false;apply();};
     im.src=URL.createObjectURL(f);
   };
-  zoom.oninput=()=>{crop.z=+zoom.value;apply();};
-  let drag=null;
-  box.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};box.setPointerCapture(e.pointerId);});
-  box.addEventListener('pointermove',e=>{if(!drag||crop.ratio==='or')return;
-    crop.tx+=e.clientX-drag.x;crop.ty+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};apply();});
-  box.addEventListener('pointerup',()=>drag=null);
+  const pts=new Map();
+  box.addEventListener('pointerdown',e=>{
+    box.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  });
+  box.addEventListener('pointermove',e=>{
+    if(!pts.has(e.pointerId)||crop.ratio==='or'||!crop.img)return;
+    const p=pts.get(e.pointerId);
+    if(pts.size===1){
+      crop.tx+=e.clientX-p.x;crop.ty+=e.clientY-p.y;
+      p.x=e.clientX;p.y=e.clientY;apply();return;
+    }
+    if(pts.size===2){
+      const vals=[...pts.values()];
+      const d0=Math.hypot(vals[0].x-vals[1].x,vals[0].y-vals[1].y);
+      p.x=e.clientX;p.y=e.clientY;
+      const v2=[...pts.values()];
+      const d1=Math.hypot(v2[0].x-v2[1].x,v2[0].y-v2[1].y);
+      if(d0<1)return;
+      const r=box.getBoundingClientRect();
+      zoomAt(d1/d0,(v2[0].x+v2[1].x)/2-r.left,(v2[0].y+v2[1].y)/2-r.top);
+    }
+  });
+  const drop=e=>pts.delete(e.pointerId);
+  box.addEventListener('pointerup',drop);
+  box.addEventListener('pointercancel',drop);
+  box.addEventListener('wheel',e=>{
+    if(crop.ratio==='or'||!crop.img)return;
+    e.preventDefault();
+    const r=box.getBoundingClientRect();
+    zoomAt(e.deltaY<0?1.1:1/1.1,e.clientX-r.left,e.clientY-r.top);
+  },{passive:false});
   apply();
 }
 function cropToCanvas(){
