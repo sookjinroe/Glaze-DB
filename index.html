@@ -231,6 +231,11 @@ store.works.forEach(w=>{
   });
   w.glazes=[...g];delete w.links;
 });
+delete (store.tags||{})['undefined'];
+Object.keys(store.tags||{}).forEach(t=>{
+  store.tags[t]=store.tags[t].filter(c=>typeof c==='string');
+  if(!store.tags[t].length)delete store.tags[t];
+});
 store.myGlazes=store.myGlazes||[];
 store.glazeMy=store.glazeMy||{};
 (store.mine||[]).forEach(m=>{
