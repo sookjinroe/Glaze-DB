@@ -213,6 +213,16 @@ let store={owned:{},stars:{},tags:{},mine:[],works:[]};
 try{const s=localStorage.getItem(LSKEY); if(s) store=Object.assign(store,JSON.parse(s));}catch(e){}
 (store.mine||[]).forEach(m=>{if(!m.photos){m.photos=[m.id];m.main=m.id;}});
 store.works=store.works||[];
+store.works.forEach(w=>{
+  if(w.glazes)return;
+  const g=new Set();
+  (w.links||[]).forEach(c=>{
+    const mm=(store.mine||[]).find(x=>'u:'+x.id===c);
+    if(mm){g.add(mm.uNo!=null?mm.uNo:mm.uName);g.add(mm.oNo!=null?mm.oNo:mm.oName);}
+    else{const p=c.split('-');if(p.length===2&&!isNaN(+p[0])){g.add(+p[0]);g.add(+p[1]);}}
+  });
+  w.glazes=[...g];delete w.links;
+});
 const save=()=>{store._ts=Date.now();try{localStorage.setItem(LSKEY,JSON.stringify(store))}catch(e){};queueSync();};
 const ownedBrush=no=>!!(store.owned[no]&&store.owned[no].b);
 const makeable=s=>s.u!=null&&s.o!=null&&ownedBrush(s.u)&&ownedBrush(s.o);
@@ -516,14 +526,28 @@ function wireMemoEdit(entry,reopen){
     $('#memoSave').onclick=()=>{entry.memo=$('#memoBox').value.trim();save();reopen(null);};
   };
 }
-function worksUsing(code){
-  return (store.works||[]).filter(w=>(w.links||[]).includes(code));
+const wUses=(w,part)=>(w.glazes||[]).some(x=>x===part);
+function specWorks(s){
+  const p1=s.u!=null?s.u:s.uName, p2=s.o!=null?s.o:s.oName;
+  return (store.works||[]).filter(w=>wUses(w,p1)&&wUses(w,p2));
 }
-function workMiniCards(ws){
+const glazeWorks=no=>(store.works||[]).filter(w=>wUses(w,no));
+function workMiniCards(ws,title){
   if(!ws.length)return '';
-  return `<div class="thd">이 조합으로 만든 작품</div><div class="minirow">${ws.map(w=>
+  return `<div class="thd">${title}</div><div class="minirow">${ws.map(w=>
     `<button class="mini" data-work="${w.id}"><img src="${photoCache[w.main]||''}" data-pid="${w.main}" alt="">
      <span>${(w.title||'무제').replace(/</g,'&lt;')}</span></button>`).join('')}</div>`;
+}
+function glazeName(part){return typeof part==='number'?(GMAP[part]?GMAP[part].name:part):part;}
+function glazeDot(part){
+  const g=typeof part==='number'?GMAP[part]:null;
+  return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${g&&g.hex?g.hex:'#CCC'};margin-right:5px;vertical-align:-1px"></span>`;
+}
+function glazeChips(parts){
+  return parts.map(p=>{
+    const clickable=typeof p==='number';
+    return `<button class="tag" ${clickable?`data-gl="${p}"`:''}>${glazeDot(p)}${glazeName(p)}</button>`;
+  }).join('')||'<span style="color:var(--sub);font-size:13px">기록된 유약이 없어요</span>';
 }
 function openMineSheet(s,viewPid){
   const entry=findMine(s.id); if(!entry)return;
@@ -532,7 +556,7 @@ function openMineSheet(s,viewPid){
   const tagNames=Object.keys(store.tags).sort();
   const r1=s.u!=null?glazeRow('먼저 2회',s.u):glazeRowCustom('먼저 2회',s.uName);
   const r2=s.o!=null?glazeRow('위에 2회',s.o):glazeRowCustom('위에 2회',s.oName);
-  const ws=worksUsing(s.code);
+  const ws=specWorks(s);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode">${s.disp}</span><span class="dfam">내 시편 · ${(GRPS[s.grp]||{}).name||''}</span></div>
     <img class="dimg" src="${photoCache[viewPid]||''}" data-pid="${viewPid}" alt="내 시편 ${s.disp}">
@@ -546,7 +570,7 @@ function openMineSheet(s,viewPid){
     <div class="recipe">${r1}${r2}</div>
     <div class="thd">메모 <button id="memoEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
     <p id="memoView" style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${(s.memo||'—').replace(/</g,'&lt;')}</p>
-    ${workMiniCards(ws)}
+    ${workMiniCards(ws,'이 조합의 두 유약을 쓴 작품')}
     <div class="thd">태그</div>
     <div class="tagwrap">${tagNames.map(t=>{
       const on=(store.tags[t]||[]).includes(s.code);
@@ -690,13 +714,6 @@ function renderWorks(){
     :'<div class="empty">아직 작품이 없어요.<br>+ 버튼으로 첫 작품을 등록해보세요.</div>';
   ensurePhotos();
 }
-function specChip(code){
-  const s=SP.find(x=>x.code===code);
-  if(!s)return `<span class="tag" style="opacity:.5">${code} (삭제됨)</span>`;
-  return `<button class="mini" data-spec="${code}">
-    <img src="${s.mine?(photoCache[s.main||s.id]||''):'crops/'+s.file}" ${s.mine?`data-pid="${s.main||s.id}"`:''} alt="">
-    <span>${s.disp||s.code}</span></button>`;
-}
 function openWorkSheet(id,viewPid){
   const w=findWork(id); if(!w)return;
   viewPid=viewPid||w.main;
@@ -709,8 +726,8 @@ function openWorkSheet(id,viewPid){
       <button class="btn" id="delPhoto">이 사진 삭제</button></div>
     <div class="thd">메모 <button id="memoEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
     <p id="memoView" style="margin:4px 2px;font-size:14px;white-space:pre-wrap">${(w.memo||'—').replace(/</g,'&lt;')}</p>
-    <div class="thd">사용한 조합 <button id="linksEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
-    <div class="minirow">${(w.links||[]).map(specChip).join('')||'<span style="color:var(--sub);font-size:13px">연결된 조합이 없어요</span>'}</div>
+    <div class="thd">사용한 유약 <button id="glazesEdit" style="color:var(--accent);font-size:12px;font-weight:700;margin-left:6px">수정</button></div>
+    <div class="tagwrap">${glazeChips(w.glazes||[])}</div>
     <div class="btnrow" style="margin-top:18px"><button class="btn warn" id="workDel">이 작품 삭제</button></div>`;
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
@@ -718,8 +735,8 @@ function openWorkSheet(id,viewPid){
   const wm={...w, main:w.main};
   wirePhotoMgmt(w,viewPid,reopen);
   wireMemoEdit(w,()=>reopen(viewPid));
-  $('#linksEdit').onclick=()=>openSpecSelector(w.links||[],sel=>{
-    w.links=sel;save();reopen(viewPid);
+  $('#glazesEdit').onclick=()=>openGlazeSelector(w.glazes||[],sel=>{
+    w.glazes=sel;save();reopen(viewPid);
   },()=>reopen(viewPid));
   $('#workDel').onclick=()=>{
     if(!confirm('이 작품을 삭제할까요?'))return;
@@ -727,20 +744,24 @@ function openWorkSheet(id,viewPid){
     store.works=(store.works||[]).filter(x=>x.id!==id);save();
     closeSheet();renderWorks();
   };
-  $$('#sheet [data-spec]').forEach(b=>b.onclick=()=>openSheet(b.dataset.spec));
+  $$('#sheet [data-gl]').forEach(b=>b.onclick=()=>{
+    closeSheet();curTab='glaze';
+    $$('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab==='glaze'));
+    renderTab();renderGlazeDetail(+b.dataset.gl);
+  });
   ensurePhotos();
 }
 let workDraft=null;
 function openWorkAdd(){
-  if(!workDraft)workDraft={title:'',memo:'',links:[],b64:null};
+  if(!workDraft)workDraft={title:'',memo:'',glazes:[],b64:null};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">작품 추가</span></div>
     <p style="font-size:12.5px;color:var(--sub);margin:4px 2px 0">이 작품은 이 기기에 저장돼요.</p>
     ${workDraft.b64?`<img class="dimg" src="data:image/jpeg;base64,${workDraft.b64}" alt="">`:cropUI()}
     <div class="formrow"><label>제목</label><input type="text" id="wTitle" value="${workDraft.title.replace(/"/g,'&quot;')}"></div>
     <div class="formrow"><label>메모</label><textarea id="wMemo">${workDraft.memo}</textarea></div>
-    <div class="formrow"><label>사용한 조합</label>
-      <button class="btn" id="wLinks">조합 선택 (${workDraft.links.length})</button></div>
+    <div class="formrow"><label>사용한 유약</label>
+      <button class="btn" id="wLinks">유약 선택 (${workDraft.glazes.length})</button></div>
     <div class="btnrow"><button class="btn" id="wSubmit" style="background:var(--ink);color:#fff;border-color:var(--ink)">등록</button></div>`;
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
@@ -748,7 +769,7 @@ function openWorkAdd(){
   const grab=()=>{workDraft.title=$('#wTitle').value;workDraft.memo=$('#wMemo').value;
     if(!workDraft.b64&&crop.img)workDraft.b64=cropToCanvas().toDataURL('image/jpeg',0.88).split(',')[1];};
   $('#wLinks').onclick=()=>{grab();
-    openSpecSelector(workDraft.links,sel=>{workDraft.links=sel;openWorkAdd();},()=>openWorkAdd());};
+    openGlazeSelector(workDraft.glazes,sel=>{workDraft.glazes=sel;openWorkAdd();},()=>openWorkAdd());};
   $('#wSubmit').onclick=async()=>{
     grab();
     if(!workDraft.b64){alert('사진을 선택해주세요.');return;}
@@ -758,31 +779,37 @@ function openWorkAdd(){
     if(getToken())pushPhoto(pid,workDraft.b64).catch(()=>{});
     store.works=store.works||[];
     store.works.push({id,title:workDraft.title.trim(),memo:workDraft.memo.trim(),
-      links:workDraft.links,photos:[pid],main:pid,ts:Date.now()});
+      glazes:workDraft.glazes,photos:[pid],main:pid,ts:Date.now()});
     save();workDraft=null;
     closeSheet();renderWorks();
   };
 }
-function openSpecSelector(selected,onDone,onCancel){
-  let sel=new Set(selected);
-  function list(q){
-    const xs=SP.filter(s=>!q||(s.disp||s.code).includes(q)||(GMAP[s.u]&&GMAP[s.u].name.includes(q))||(GMAP[s.o]&&GMAP[s.o].name.includes(q)));
-    const top=xs.filter(s=>sel.has(s.code)), rest=xs.filter(s=>!sel.has(s.code)).slice(0,80);
-    return [...top,...rest].map(s=>`<button class="tag ${sel.has(s.code)?'on':''}" data-pick="${s.code}">
-      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.hex};margin-right:5px;vertical-align:-1px"></span>${s.disp||s.code}${s.mine?' ·내':''}</button>`).join('');
+function openGlazeSelector(selected,onDone,onCancel){
+  let sel=[...selected];
+  const has=p=>sel.some(x=>x===p);
+  function paint(){
+    $('#pickN').textContent=sel.length;
+    $('#pickList').innerHTML=GL.map(g=>
+      `<button class="tag ${has(g.no)?'on':''}" data-no="${g.no}">${glazeDot(g.no)}${g.name}</button>`).join('');
+    $('#pickCustom').innerHTML=sel.filter(p=>typeof p==='string').map(nm=>
+      `<button class="tag on" data-cus="${nm.replace(/"/g,'&quot;')}">${glazeDot(nm)}${nm} ✕</button>`).join('');
+    $$('#pickList [data-no]').forEach(b=>b.onclick=()=>{
+      const n=+b.dataset.no; sel=has(n)?sel.filter(x=>x!==n):[...sel,n]; paint();});
+    $$('#pickCustom [data-cus]').forEach(b=>b.onclick=()=>{
+      sel=sel.filter(x=>x!==b.dataset.cus); paint();});
   }
-  function paint(){$('#pickList').innerHTML=list($('#pickQ').value.trim());
-    $$('#pickList [data-pick]').forEach(b=>b.onclick=()=>{
-      const c=b.dataset.pick; sel.has(c)?sel.delete(c):sel.add(c); paint();});
-    $('#pickN').textContent=sel.size;}
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">사용한 조합 선택</span><span class="dfam"><span id="pickN">${sel.size}</span>개</span></div>
-    <div class="tagadd" style="margin-top:10px"><input id="pickQ" placeholder="코드나 유약명으로 찾기 (예: 24-14, 옥색)"></div>
-    <div class="tagwrap" id="pickList" style="margin-top:10px;max-height:44dvh;overflow-y:auto"></div>
+    <div class="dhead"><span class="dcode" style="font-family:var(--sans);font-size:18px;font-weight:800">사용한 유약 선택</span><span class="dfam"><span id="pickN">${sel.length}</span>개</span></div>
+    <div class="tagwrap" id="pickList" style="margin-top:12px;max-height:42dvh;overflow-y:auto"></div>
+    <div class="thd">직접 입력한 유약</div>
+    <div class="tagwrap" id="pickCustom"></div>
+    <div class="tagadd"><input id="pickX" placeholder="목록에 없는 유약 이름"><button class="btn" id="pickXAdd">추가</button></div>
     <div class="btnrow" style="margin-top:14px"><button class="btn" id="pickOk" style="background:var(--ink);color:#fff;border-color:var(--ink)">완료</button>
     <button class="btn" id="pickCancel">취소</button></div>`;
-  $('#pickQ').oninput=paint; paint();
-  $('#pickOk').onclick=()=>onDone([...sel]);
+  paint();
+  $('#pickXAdd').onclick=()=>{const v=$('#pickX').value.trim();
+    if(v&&!has(v)){sel=[...sel,v];$('#pickX').value='';paint();}};
+  $('#pickOk').onclick=()=>onDone(sel);
   $('#pickCancel').onclick=onCancel;
 }
 function openSheet(code){
@@ -801,6 +828,7 @@ function openSheet(code){
     <div class="recipe">${glazeRow('먼저 2회',s.u)}${glazeRow('위에 2회',s.o)}</div>
     <div class="makeline ${mk?'y':''}">${mk?'지금 공방 재고로 만들 수 있어요':'붓시유용 유약이 부족해요 — 설정에서 보유를 확인하세요'}</div>
     ${s.rev?`<button class="revchip" data-open="${s.rev}">순서 뒤집기 → <span class="rc">${s.rev}</span></button>`:''}
+    ${workMiniCards(specWorks(s),'이 조합의 두 유약을 쓴 작품')}
     <div class="thd">태그</div>
     <div class="tagwrap">${tagNames.map(t=>{
       const on=(store.tags[t]||[]).includes(code);
@@ -809,6 +837,8 @@ function openSheet(code){
   $('#sheet').dataset.code=code;
   $('#scrim').classList.add('open');$('#sheet').classList.add('open');
   document.body.style.overflow='hidden';
+  $$('#sheet [data-work]').forEach(b=>b.onclick=()=>openWorkSheet(b.dataset.work));
+  ensurePhotos();
 }
 function closeSheet(){$('#scrim').classList.remove('open');$('#sheet').classList.remove('open');
   document.body.style.overflow='';render();}
@@ -857,6 +887,7 @@ function renderGlazeDetail(no){
       <span class="nm" style="font-weight:800">${g.no} ${g.name}</span>
       <span style="font-size:12px;color:var(--sub)">${ownText(no)}</span></div>
     ${g.file?`<img src="singles/${g.file}" alt="${g.name} 단일 시유" style="width:150px;border-radius:12px;border:1px solid var(--line)">`:''}
+    ${workMiniCards(glazeWorks(no),'이 유약을 쓴 작품')}
     <div class="gsec">밑유약으로 쓴 조합 <b>${under.length}</b></div>${under.length?grid(under):'<div class="empty">없음</div>'}
     <div class="gsec">윗유약으로 쓴 조합 <b>${over.length}</b></div>${over.length?grid(over):'<div class="empty">없음</div>'}`;
 }
@@ -864,6 +895,7 @@ $('#workView').addEventListener('click',e=>{
   const c=e.target.closest('[data-work]'); if(c)openWorkSheet(c.dataset.work);
 });
 $('#glazeView').addEventListener('click',e=>{
+  const wk=e.target.closest('[data-work]'); if(wk)return openWorkSheet(wk.dataset.work);
   if(e.target.id==='gBack')return renderGlazeList();
   const c=e.target.closest('.card'); if(c)return openSheet(c.dataset.code);
   const gc=e.target.closest('.gcard'); if(gc)renderGlazeDetail(+gc.dataset.g);
